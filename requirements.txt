@@ -1,3 +1,10 @@
+psutil
+timeago
+matplotlib
 discord.py
 aiosqlite
 jishaku
+polib
+Unidecode
+wargaming
+Pillow
