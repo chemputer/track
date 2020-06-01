@@ -28,10 +28,6 @@ class Help(commands.HelpCommand):
 
         @menus.button('↩️')
         async def main(self, payload):
-            if payload.event_type != 'REACTION_ADD':
-                return
-            await self.message.remove_reaction(payload.emoji, payload.member)
-
             await self.message.edit(embed=self.main_embed)
 
         @menus.button('⏹️', position=menus.Last())
@@ -39,16 +35,12 @@ class Help(commands.HelpCommand):
             self.stop()
 
         async def cog_embed(self, payload):
-            if payload.event_type != 'REACTION_ADD':
-                return
-            await self.message.remove_reaction(payload.emoji, payload.member)
-
             for cog in self.cogs:
                 if payload.emoji.name == cog.emoji:
                     await self.message.edit(embed=await self.instance.cog_embed(cog))
 
     async def send_bot_help(self, mapping):
-        cogs = [self.context.bot.get_cog(cog) for cog in ['General', 'WoWS', 'Fun']]
+        cogs = [self.context.bot.get_cog(cog) for cog in ['General', 'WoWS', 'Fun', 'Miscellaneous', 'Options']]
         perms = discord.Permissions.text()
         perms.update(read_messages=True, manage_messages=True,
                      mention_everyone=False, send_tts_messages=False)
@@ -73,14 +65,13 @@ class Help(commands.HelpCommand):
         await self.context.send(embed=await self.cog_embed(cog))
 
     async def cog_embed(self, cog):
-        cogs = [self.context.bot.get_cog(cog) for cog in ['General']]
-        if cog.qualified_name in cogs:
+        if cog.qualified_name in ['Core']:
             return
 
         def descriptor(command):
             string = f'`{command.name}` - {command.short_doc}'
             if isinstance(command, commands.Group):
-                string += f'\n┗ {", ".join(f"`{sub}`" for sub in command.all_commands)}'
+                string += f'\n┗ {", ".join(f"`{sub.name}`" for sub in command.commands)}'
             return string
 
         embed = discord.Embed(title=f'Help - {cog.qualified_name}',
@@ -120,6 +111,44 @@ class Help(commands.HelpCommand):
                         value=f'```{utils.get_signature(command)}```')
         embed.set_footer(text='<REQUIRED argument> | [OPTIONAL argument] | (Do not type these symbols!)')
         await self.context.send(embed=embed)
+
+    # Override to make cogs not case-sensitive
+    async def command_callback(self, ctx, *, command=None):
+        await self.prepare_help_command(ctx, command)
+        bot = ctx.bot
+
+        if command is None:
+            mapping = self.get_bot_mapping()
+            return await self.send_bot_help(mapping)
+
+        cog = bot.get_cog(command.title())
+        if cog is not None:
+            return await self.send_cog_help(cog)
+
+        maybe_coro = discord.utils.maybe_coroutine
+
+        keys = command.split(' ')
+        cmd = bot.all_commands.get(keys[0])
+        if cmd is None:
+            string = await maybe_coro(self.command_not_found, self.remove_mentions(keys[0]))
+            return await self.send_error_message(string)
+
+        for key in keys[1:]:
+            try:
+                found = cmd.all_commands.get(key)
+            except AttributeError:
+                string = await maybe_coro(self.subcommand_not_found, cmd, self.remove_mentions(key))
+                return await self.send_error_message(string)
+            else:
+                if found is None:
+                    string = await maybe_coro(self.subcommand_not_found, cmd, self.remove_mentions(key))
+                    return await self.send_error_message(string)
+                cmd = found
+
+        if isinstance(cmd, commands.Group):
+            return await self.send_group_help(cmd)
+        else:
+            return await self.send_command_help(cmd)
 
 
 class General(commands.Cog):
@@ -257,7 +286,7 @@ class General(commands.Cog):
                               f'{self.bot.uptime.strftime("%m/%d/%Y %H:%M UTC")}\n'
                               f'(~{timeago.format(self.bot.uptime, datetime.utcnow())})')
         embed.add_field(name='Statistics',
-                        value=f'Commands Run: {1003}\n'
+                        value=f'Commands Run: {self.bot.stats["commands_run"]}\n'
                               f'Guilds: {len(list(self.bot.guilds))}\n'
                               f'Users: {len(list(self.bot.get_all_members()))} '
                               f'(Unique: {len(set(self.bot.get_all_members()))})')

@@ -1,7 +1,5 @@
 from discord.ext import commands, menus
 import discord
-import difflib
-import random
 
 import copy
 
@@ -34,7 +32,13 @@ ESCAPE_LEVELS = {1: [[8, 4, 4, 0, 0, 0],
                       [2, 4, 5, 1, 1, 7],
                       [8, 8, 8, 9, 0, 7],
                       [0, 0, 10, 9, 11, 11],
-                      [12, 12, 10, 13, 13, 0]]}
+                      [12, 12, 10, 13, 13, 0]],
+                 60: [[2, 2, 4, 0, 5, 5],
+                      [3, 3, 4, 0, 9, 0],
+                      [6, 0, 1, 1, 9, 0],
+                      [6, 8, 8, 8, 9, 12],
+                      [6, 0, 0, 10, 0, 12],
+                      [7, 7, 0, 10, 11, 11]]}
 ESCAPE_MAPPING = {-1: '⬛',
                   0: '▫️',
                   1: '<:esc1:691810735126478889>',
@@ -52,8 +56,6 @@ ESCAPE_MAPPING = {-1: '⬛',
                   13: '<:esc13:691810735201714177>',
                   14: '<:esc14:691810735260565635>',
                   15: '<:esc15:691810735394652170>'}
-BUKI_EMOJI_SERVERS = (552570749953507338, 611977431959732234,
-                      641016852864040991, 677591786138632192)
 
 
 class Fun(commands.Cog):
@@ -107,10 +109,6 @@ class Fun(commands.Cog):
 
         @menus.button('🔼')
         async def up(self, payload):
-            if payload.event_type != 'REACTION_ADD':
-                return
-            await self.message.remove_reaction(payload.emoji, payload.member)
-
             positions = []
             direction_flag = False
             for y, row in enumerate(self.layout):
@@ -133,10 +131,6 @@ class Fun(commands.Cog):
 
         @menus.button('🔽')
         async def down(self, payload):
-            if payload.event_type != 'REACTION_ADD':
-                return
-            await self.message.remove_reaction(payload.emoji, payload.member)
-
             positions = []
             direction_flag = False
             for y, row in enumerate(self.layout):
@@ -159,10 +153,6 @@ class Fun(commands.Cog):
 
         @menus.button('◀️')
         async def left(self, payload):
-            if payload.event_type != 'REACTION_ADD':
-                return
-            await self.message.remove_reaction(payload.emoji, payload.member)
-
             positions = []
             direction_flag = False
             for y, row in enumerate(self.layout):
@@ -185,10 +175,6 @@ class Fun(commands.Cog):
 
         @menus.button('▶️')
         async def right(self, payload):
-            if payload.event_type != 'REACTION_ADD':
-                return
-            await self.message.remove_reaction(payload.emoji, payload.member)
-
             positions = []
             direction_flag = False
             for y, row in enumerate(self.layout):
@@ -213,10 +199,6 @@ class Fun(commands.Cog):
             await self.update_embed()
 
         async def car(self, payload):
-            if payload.event_type != 'REACTION_ADD':
-                return
-            await self.message.remove_reaction(payload.emoji, payload.member)
-
             for index, emoji in ESCAPE_MAPPING.items():
                 if index != -1 and index != 0 and f'<:{payload.emoji.name}:{payload.emoji.id}>' == emoji:
                     self.active = index
@@ -224,7 +206,7 @@ class Fun(commands.Cog):
             await self.update_embed()
 
     @commands.command(brief='Minigame inspired by "Rush Hour".')
-    async def escape(self, ctx, level=1):
+    async def escape(self, ctx, level: int = 1):
         """
         A minigame inspired by Thinkfun's "Rush Hour".
         """
@@ -238,104 +220,6 @@ class Fun(commands.Cog):
             await self.EscapeMenu(ctx, copy.deepcopy(ESCAPE_LEVELS[level]), embed).start(ctx)
         except KeyError:
             await ctx.send('Level not found.')
-
-    @commands.group(invoke_without_commands=True, brief='(Fu)buki emojis!')
-    async def buki(self, ctx, *, query=None):
-        """
-        Emojis of (Fu)buki from Kantai Collection.
-
-        Not using a subcommand returns a random emoji or a queried emoji.
-        """
-        emojis = [emoji for server in BUKI_EMOJI_SERVERS for emoji in self.bot.get_guild(server).emojis]
-
-        if query is None:
-            return await ctx.send(random.choice(emojis))
-
-        for emoji in emojis:
-            if emoji.name.lower() == query.lower() or emoji.name.lower() == 'buki' + query.lower():
-                return await ctx.send(emoji)
-
-        error = f'`{query}`? Could not find that Buki <:bukitears:568142198323806249>'
-        similar = difflib.get_close_matches(query, [emoji.name.lower() for emoji in emojis], n=3, cutoff=0.75)
-        if similar:
-            error += '\nDid you mean...\n- ' + '\n- '.join(similar)
-        await ctx.send(error)
-
-    @buki.command(brief='List all emojis.')
-    async def list(self, ctx, page=None):
-        """
-        Lists all available emojis.
-        """
-        emojis = [emoji for server in BUKI_EMOJI_SERVERS for emoji in self.bot.get_guild(server).emojis]
-        split = [emojis[i * 28:(i + 1) * 28] for i in range((len(emojis) + 27) // 28)]  # Split because of embed limit (Note: average ~30 chars)
-
-        embed = discord.Embed(title='List of Buki Emojis',
-                              description='Bukis for any occasion. What\'s your favorite?',
-                              color=self.bot.color)
-
-        class SplitEmojis(menus.ListPageSource):
-            def __init__(self, data):
-                super().__init__(data, per_page=28)
-
-            async def format_page(self, menu, entries):
-                offset = menu.current_page * self.per_page
-                return '\n'.join(str(i) for i in enumerate(entries, start=offset))
-
-        # for group in range(0, len(split)):
-        #     embed.add_field(name=str(group + 1),
-        #                     value='∙'.join(str(emoji) for emoji in split[group]))
-        pages = menus.MenuPages(source=SplitEmojis(emojis), clear_reactions_after=True)
-        await pages.start(ctx)
-
-# @commands.group(brief='Emotes of everyone\'s favorite potato, (Fu)buki.')
-# async def buki(self, ctx, *query):
-#     """
-#     For each space separated argument, returns the appropriate buki, unseperated (for multi-bukis).
-#     If the search is empty, a random buki is provided!
-#     """
-#     emojis = [emoji for server in BUKI_EMOJI_SERVERS for emoji in self.bot.get_guild(server).emojis]
-#
-#     if len(query) == 0:
-#         await ctx.send(random.choice(emojis))
-#     elif query == ('list',):
-#         split = [emojis[i * 28:(i + 1) * 28] for i in range((len(emojis) + 27) // 28)]  # Split because of embed limit (Note: average ~30 chars)
-#         embed = discord.Embed(title='List of Buki Emotes',
-#                               description='Bukis for any occasion. What\'s your favorite?',
-#                               color=self.bot.color)
-#         for group in range(0, len(split)):
-#             embed.add_field(name=str(group + 1),
-#                             value='∙'.join(str(emoji) for emoji in split[group]))
-#         embed.set_footer(text='These are split up because of Discord\'s embed limits :(')
-#         await ctx.send(embed=embed)
-#     else:
-#         string = ''
-#         for element in query:
-#             if element.lower() == 't90':
-#                 embed = discord.Embed()
-#                 embed.set_image(
-#                     url='https://media.discordapp.net/attachments/552570749953507340/673941097516367902/bukit-90_II.png?width=941&height=716')
-#                 await ctx.send(embed=embed)
-#                 continue
-#             elif element.lower() == 'flanker':
-#                 embed = discord.Embed()
-#                 embed.set_image(
-#                     url='https://media.discordapp.net/attachments/552570749953507340/673941336105418832/bukiflanker_.png?width=1096&height=717')
-#                 await ctx.send(embed=embed)
-#                 continue
-#
-#             if not element.startswith('buki'):
-#                 element = 'buki' + element
-#             for emoji in emojis:
-#                 if emoji.name.lower() == element.lower() or emoji.name.lower() == 'buki' + element.lower():
-#                     string += str(emoji)
-#                     break
-#             else:
-#                 similar = difflib.get_close_matches(element, [emoji.name.lower() for emoji in emojis], n=3, cutoff=0.75)
-#                 await ctx.send(f'`{element}`? Could not find that Buki <:bukitears:568142198323806249>' +
-#                                ('\nDid you mean...\n- ' + '\n- '.join(similar) if len(similar) != 0 else ''))
-#                 break
-#         else:
-#             await ctx.send(string)
 
 
 def setup(bot):

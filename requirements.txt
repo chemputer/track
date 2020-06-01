@@ -8,3 +8,12 @@ polib
 Unidecode
 wargaming
 Pillow
+pycryptodomex
+tqdm
+mock
+ddt
+raven
+lxml
+imageio
+imageio-ffmpeg
+numpy

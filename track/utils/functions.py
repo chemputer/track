@@ -1,6 +1,7 @@
 from discord.ext import commands
 
 import asyncio
+from contextlib import asynccontextmanager
 import inspect
 from datetime import datetime
 
@@ -33,7 +34,7 @@ def get_signature(command):
             if details.default == inspect._empty:
                 signature += f' <{param}>'
             else:
-                signature += f' [{param}]'
+                signature += f' [{param}={details.default}]'
 
     return signature
 
@@ -64,3 +65,14 @@ async def fetch_user(conn, user):
         await conn.commit()
     c = await conn.execute(f'SELECT * FROM users WHERE id = {user.id}')
     return await c.fetchone()
+
+
+class Transaction:
+    def __init__(self, conn):
+        self.conn = conn
+
+    async def __aenter__(self):
+        return self.conn
+
+    async def __aexit__(self, exc_type, exc, tb):
+        await self.conn.commit()
