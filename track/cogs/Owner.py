@@ -28,11 +28,11 @@ class Owner(commands.Cog):
         await ctx.send(message)
 
     @commands.command(brief='Sends a message to a channel.')
-    async def send(self, ctx, channel: discord.TextChannel, *, message):
+    async def send(self, ctx, channel: int, *, message):
         """
         Sends a message to a channel.
         """
-        await channel.send(message)
+        await self.bot.get_channel(channel).send(message)
         await ctx.message.add_reaction('✅')
 
     @commands.command(brief='Starts typing to a channel.')
@@ -47,12 +47,19 @@ class Owner(commands.Cog):
             await asyncio.sleep(duration)
         await ctx.message.add_reaction('✅')
 
-    @commands.command()
+    @commands.command(brief='Guilds list.')
     async def guilds(self, ctx):
+        """
+        Lazy way for me to check what guilds the bot is in.
+        I'll deal with the 2000 character limit later.
+        """
         await ctx.send('\n'.join([f'{guild.name} ({guild.member_count})' for guild in self.bot.guilds]))
 
-    @commands.command()
+    @commands.command(brief='Debug command.')
     async def debug(self, ctx, *, string=''):
+        """
+        Debug command.
+        """
         async with utils.Transaction(self.bot.db) as conn:
             # await conn.execute('ALTER TABLE guilds ADD builds_channel INTEGER')
             # await conn.execute('ALTER TABLE builds ADD in_queue INTEGER DEFAULT 0')

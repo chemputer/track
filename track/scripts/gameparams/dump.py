@@ -54,9 +54,8 @@ for key, entity in raw.items():
 print('Filtering entities into db.')
 with sqlite3.connect('../../assets/private/gameparams.db') as conn:
     for entity_type in entity_types:
-        c = conn.cursor()
-        c.execute(f'DROP TABLE IF EXISTS {entity_type}')
-        c.execute(f'CREATE TABLE {entity_type}(id TEXT PRIMARY KEY, value TEXT)')
+        conn.execute(f'DROP TABLE IF EXISTS {entity_type}')
+        conn.execute(f'CREATE TABLE {entity_type}(id TEXT PRIMARY KEY, value TEXT)')
         for key, entity in raw.items():
             if entity_type == entity['typeinfo']['type']:
-                c.execute(f'INSERT INTO {entity_type} VALUES (?, ?)', [key, json.dumps(entity)])
+                conn.execute(f'INSERT INTO {entity_type} VALUES (?, ?)', [key, pickle.dumps(entity)])

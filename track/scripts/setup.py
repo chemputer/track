@@ -1,6 +1,6 @@
 import sqlite3
 
-with sqlite3.connect('../assets/private/track.db') as conn:
+with sqlite3.connect('../assets/private/bot.db') as conn:
     conn.execute('''CREATE TABLE IF NOT EXISTS guilds (id INTEGER PRIMARY KEY,
                                                        prefixes BLOB,
                                                        builds_channel INTEGER,

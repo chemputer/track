@@ -23,6 +23,7 @@ import logging
 import math
 from lxml import etree
 import os
+import collections
 
 import config
 import utils
@@ -30,7 +31,7 @@ import utils
 # from replay_unpack.clients.wows import ReplayPlayer
 
 
-# gets rid of annoying logs for expected missing tables
+# gets rid of annoying logs for expected missing tables by maplesyrup queries
 logging.getLogger('aiosqlite').setLevel(logging.CRITICAL)
 
 # Turns off interactive plotting?
@@ -81,7 +82,7 @@ _base_fp = {3: 0.9667, 4: 0.9001, 5: 0.8335, 6: 0.7669, 7: 0.7003, 8: 0.6337, 9:
 
 
 REGIONS = ['na', 'eu', 'ru', 'asia']
-VERSION = '0.9.3'
+VERSION = '0.9.4.1'
 SIMILAR_SHIPS: List[Tuple] = [('Montana', 'Ohio'),
                               ('Thunderer', 'Conqueror'),
                               ('Fletcher', 'Black'),
@@ -160,8 +161,7 @@ class Ship:
 
         # XXX: Potential @lru_cache function
         c = await ctx.bot.gameparams.execute(f'SELECT value FROM Ship WHERE id = \'{index}\'')
-        params_blob = await c.fetchone()
-        params = json.loads(params_blob['value'])
+        params = await c.fetchone()
         return Ship(name=ctx.bot.globalmo[f'IDS_{params["index"]}_FULL'],
                     short_name=ctx.bot.globalmo[f'IDS_{params["index"]}'],
                     params=params)
@@ -293,7 +293,7 @@ class SplitBuilds(menus.ListPageSource):
         return embed
 
 
-class WoWS(commands.Cog):
+class WoWS(commands.Cog, name='Wows'):
     """
     For your favorite pixelbote collecting game!
     """
@@ -301,17 +301,22 @@ class WoWS(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.emoji = '🚢'
+        self.display_name = 'WoWS'
 
-        self.api = wargaming.WoWS(config.wg_token, region='na', language='en')
+        Regions = collections.namedtuple('Regions', REGIONS)
+        self.api = Regions(na=wargaming.WoWS(config.wg_token, region='na', language='en'),
+                           eu=wargaming.WoWS(config.wg_token, region='eu', language='en'),
+                           ru=wargaming.WoWS(config.wg_token, region='ru', language='en'),
+                           asia=wargaming.WoWS(config.wg_token, region='asia', language='en'))
 
         self.bot.globalmo = {entry.msgid: entry.msgstr for entry in polib.mofile('assets/private/global.mo')}
         self.bot.mapping = {}  # maps name to index
         self.bot.ship_id = {}  # maps ship id to index
-        with sqlite3.connect('assets/private/GameParams.db') as conn:
+        with sqlite3.connect('assets/private/gameparams.db') as conn:
             c = conn.execute('SELECT * FROM Ship')
 
             for ship, params_blob in c:
-                params = json.loads(params_blob)
+                params = pickle.loads(params_blob)
                 if params['group'] not in ['disabled', 'unavailable', 'clan']:
                     # the full name of legacy versions of ships contains the date they were removed
                     # instead of (old) or (OLD), making it hard to remember, so in this case the short name is used
@@ -388,8 +393,7 @@ class WoWS(commands.Cog):
                     try:
                         for ammo in turret_params['ammoList']:
                             c = await self.bot.gameparams.execute(f'SELECT value FROM Projectile WHERE id = \'{ammo}\'')
-                            ammo_params_blob = await c.fetchone()
-                            ammo_params = json.loads(ammo_params_blob[0])
+                            ammo_params = await c.fetchone()
 
                             if ammo_params['ammoType'] == 'HE':
                                 # the upper() is necessary because WG made a typo with Kamikaze & her sisters
@@ -887,19 +891,19 @@ class WoWS(commands.Cog):
         end = datetime.now()
         time = (end - start).total_seconds()
 
-        if success:
-            details = await utils.fetch_user(self.bot.db, message.author)
-            result = (f'Well done, {message.author.mention}!\n'
-                      f'Time taken: `{time:.3f}s`. ')
-            if time < details['contours_record']:
-                result += 'A new record!'
-                await self.bot.db.execute(f'UPDATE users SET contours_record = {time} WHERE id = {message.author.id}')
-            await self.bot.db.execute(f'UPDATE users SET contours_played = contours_played + 1 WHERE id = {message.author.id}')
-            await self.bot.db.commit()
-            await ctx.send(result)
+        async with utils.Transaction(self.bot.db) as conn:
+            if success:
+                details = await utils.fetch_user(self.bot.db, message.author)
+                result = (f'Well done, {message.author.mention}!\n'
+                          f'Time taken: `{time:.3f}s`. ')
+                if time < details['contours_record']:
+                    result += 'A new record!'
+                    await conn.execute(f'UPDATE users SET contours_record = {time} WHERE id = {message.author.id}')
+                await conn.execute(f'UPDATE users SET contours_played = contours_played + 1 WHERE id = {message.author.id}')
+                await ctx.send(result)
 
-        embed.description = f'Answer: `{ship.name}`'
-        await original.edit(embed=embed)
+            embed.description = f'Answer: `{ship.name}`'
+            await original.edit(embed=embed)
 
     @commands.command(brief='Get user details.')
     async def profile(self, ctx):
@@ -1005,6 +1009,9 @@ class WoWS(commands.Cog):
 
     @commands.command(brief='Pull ENG localization string.')
     async def globalmo(self, ctx, index):
+        """
+        Pulls ENG localization string from index.
+        """
         try:
             await ctx.send(self.bot.globalmo[index])
         except KeyError:

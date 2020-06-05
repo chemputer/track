@@ -8,6 +8,8 @@ import psutil
 import config
 import utils
 
+VISIBLE_COGS = ['General', 'Wows', 'Misc', 'Options']
+
 
 class Help(commands.HelpCommand):
     def __init__(self):
@@ -40,7 +42,7 @@ class Help(commands.HelpCommand):
                     await self.message.edit(embed=await self.instance.cog_embed(cog))
 
     async def send_bot_help(self, mapping):
-        cogs = [self.context.bot.get_cog(cog) for cog in ['General', 'WoWS', 'Fun', 'Miscellaneous', 'Options']]
+        cogs = [self.context.bot.get_cog(cog) for cog in VISIBLE_COGS]
         perms = discord.Permissions.text()
         perms.update(read_messages=True, manage_messages=True,
                      mention_everyone=False, send_tts_messages=False)
@@ -51,7 +53,7 @@ class Help(commands.HelpCommand):
                                           'This bot is currently WIP.',
                               color=self.context.bot.color)
         embed.add_field(name='Command Categories',
-                        value='\n'.join([f'{cog.emoji} {cog.qualified_name}' for cog in cogs]))
+                        value='\n'.join([f'{cog.emoji} {cog.display_name}' for cog in cogs]))
         embed.add_field(name='Links',
                         value=f'[Invite me here!]({discord.utils.oauth_url(self.context.bot.user.id, perms)})\n'
                               f'[Support server](https://discord.gg/dU39sjq)\n'
@@ -65,7 +67,7 @@ class Help(commands.HelpCommand):
         await self.context.send(embed=await self.cog_embed(cog))
 
     async def cog_embed(self, cog):
-        if cog.qualified_name in ['Core']:
+        if cog.qualified_name not in VISIBLE_COGS:
             return
 
         def descriptor(command):
@@ -159,6 +161,7 @@ class General(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.emoji = '📔'
+        self.display_name = 'General'
 
         self._original_help_command = bot.help_command
         bot.help_command = Help()
@@ -197,7 +200,7 @@ class General(commands.Cog):
     @commands.command(brief='Displays bot\'s uptime.')
     async def uptime(self, ctx):
         """
-        Shows you the last time the bot was launched, due to scheduled reboot or an update (and hopefully not a crash).
+        Shows you the last time the bot was launched.
         """
         await ctx.send(f'Online since {self.bot.uptime.strftime("%m/%d/%Y %H:%M UTC")} '
                        f'(~{timeago.format(self.bot.uptime, datetime.utcnow())})')
@@ -229,39 +232,12 @@ class General(commands.Cog):
         await ctx.send('Thank you for your submission! '
                        'If you haven\'t already, consider joining the support server with `support`.')
 
-    @commands.command(brief='Answers to some common questions.')
-    async def faq(self, ctx):
-        """
-        Lists frequently asked questions and their responses.
-        """
-        embed = discord.Embed(title='FAQ',
-                              color=self.bot.color)
-        entries = {'How do I add this bot to my server?':
-                       'Use `invite` or click the link in `help` (you must have Manage Server permissions).',
-                   'Hey, can you add (some feature)?':
-                       'Use `suggest`.',
-                   'None of the commands are working!':
-                       'The bot may be missing permissions or you may have been automatically blacklisted for spam. '
-                       'If the problem persists, report it.',
-                   'What character is that in the profile picture?':
-                       '[Shiro from Sewayaki Kitsune no Senko-san!](https://myanimelist.net/character/167062/Shiro)'}
-        for name, value in entries.items():
-            embed.add_field(name=name, value=value, inline=False)
-        embed.set_footer(text='Have other questions? Join the support discord or PM me @Trackpad#1234.')
-
-        await ctx.send(embed=embed)
-
     @commands.command(aliases=['about', 'details'], brief='Displays extra information about the bot.')
     async def info(self, ctx):
         """
         Displays specifics of the bot.
         """
         python = sys.version_info
-
-        start = datetime.now()
-        await ctx.trigger_typing()
-        end = datetime.now()
-
         process = psutil.Process()
 
         embed = discord.Embed(title='Info',
@@ -269,7 +245,7 @@ class General(commands.Cog):
         embed.add_field(name='Latest Changelog',
                         value='Restructured the project.',
                         inline=False)
-        embed.add_field(name='Creator',
+        embed.add_field(name='Creators',
                         value='\n'.join(self.bot.get_user(owner).mention for owner in self.bot.owner_ids))
         embed.add_field(name='Created on',
                         value=f'{self.bot.created_on.strftime("%m/%d/%Y")}\n'
@@ -278,7 +254,7 @@ class General(commands.Cog):
                         value=f'[Python {python.major}.{python.minor}.{python.micro}](https://www.python.org/)\n'
                               f'[discord.py {discord.__version__}](https://discordpy.readthedocs.io/en/latest/)')
         embed.add_field(name='Status',
-                        value=f'Ping: {(end - start).total_seconds() * 1000:.2f}ms\n'
+                        value=f'Latency: {self.bot.latency * 1000:.2f}ms\n'
                               f'CPU: {process.cpu_percent()}%\n'
                               f'RAM: {process.memory_info().rss / 1048576:.2f}MB')  # bits to bytes
         embed.add_field(name='Uptime',
@@ -290,18 +266,11 @@ class General(commands.Cog):
                               f'Guilds: {len(list(self.bot.guilds))}\n'
                               f'Users: {len(list(self.bot.get_all_members()))} '
                               f'(Unique: {len(set(self.bot.get_all_members()))})')
-        embed.add_field(name='Acknowledgements',
-                        value='<@113104128783159296> - Answering a lot of questions I had, couldn\'t have done it with you!\n'
-                              '`[RKN]` - Testing! thanks guys :)',
-                        inline=False)
+        # embed.add_field(name='Acknowledgements',
+        #                 value='',
+        #                 inline=False)
 
         await ctx.send(embed=embed)
-
-    # @commands.command()
-    # @commands.is_owner()
-    # async def leave_guild(self, ctx, guild: int):
-    #     await self.bot.get_guild(guild).leave()
-    #     await ctx.send('Done.')
 
 
 def setup(bot):

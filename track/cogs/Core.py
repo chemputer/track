@@ -15,8 +15,11 @@ DEFAULT_GUILD_SETTINGS = (pickle.dumps(config.default_prefixes), None)
 
 
 def dict_factory(cursor, row):
-    return {col[0]: pickle.loads(row[index]) if type(row[index]) == bytes
-            else row[index] for index, col in enumerate(cursor.description)}
+    if len(cursor.description) == 1:
+        return pickle.loads(row[0]) if type(row[0]) == bytes else row[0]
+    else:
+        return {col[0]: pickle.loads(row[index]) if type(row[index]) == bytes
+                else row[index] for index, col in enumerate(cursor.description)}
 
 
 class Core(commands.Cog):
@@ -28,10 +31,12 @@ class Core(commands.Cog):
         self.bot.db = await aiosqlite.connect('assets/private/bot.db')
         self.bot.gameparams = await aiosqlite.connect('assets/private/gameparams.db')
         self.bot.maplesyrup = await aiosqlite.connect('assets/private/maplesyrup.db')
+        self.bot.rush = await aiosqlite.connect('assets/private/rush.db')
 
         self.bot.db.row_factory = dict_factory
         self.bot.gameparams.row_factory = dict_factory
         self.bot.maplesyrup.row_factory = dict_factory
+        self.bot.rush.row_factory = aiosqlite.Row
 
         async with utils.Transaction(self.bot.db) as conn:
             # Get guild options
@@ -48,8 +53,9 @@ class Core(commands.Cog):
             # Get latest row of stats
             c = await conn.execute('SELECT stats FROM stats ORDER BY stats DESC LIMIT 1')
             stats = await c.fetchone()
-            self.bot.stats = stats['stats'] if stats is not None else Counter()
+            self.bot.stats = stats if stats is not None else Counter()
 
+        self.bot.started = True
         print(f'Ready!          [{datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")}]\n'
               f'Name: {self.bot.user} | ID: {self.bot.user.id}')
 
@@ -66,13 +72,6 @@ class Core(commands.Cog):
         self.bot.guild_options[guild.id] = DEFAULT_GUILD_SETTINGS
         async with utils.Transaction(self.bot.db) as conn:
             await conn.execute('INSERT INTO guilds VALUES (?, ?, ?)', (guild.id,) + DEFAULT_GUILD_SETTINGS)
-
-    async def logout(self):
-        async with utils.Transaction(self.bot.db) as conn:
-            await conn.execute('INSERT INTO stats VALUES (?, ?)',
-                               (int(time.time()), pickle.dumps(self.bot.stats)))
-
-        await self.bot.logout()
 
     @commands.Cog.listener()
     async def on_command_error(self, ctx, error):
@@ -113,10 +112,18 @@ class Core(commands.Cog):
 
     async def bot_check_once(self, ctx):
         options = self.bot.guild_options[ctx.guild.id]
-        if (ctx.command.name not in options['disabled_commands'] and
-              ctx.command.cog.qualified_name not in options['disabled_cogs']):
+
+        if ctx.guild is None:
             return True
-        raise utils.CustomError('This command or its category has been disabled in this server.')
+        elif (ctx.command.parent is not None and ctx.command.parent.name in options['disabled_commands'] or
+                ctx.command.qualified_name in options['disabled_commands'] or
+                ctx.command.cog.qualified_name in options['disabled_cogs']):
+            if (not await self.bot.is_owner(ctx.author) and
+                    not ctx.channel.permissions_for(ctx.message.author).administrator):
+                raise utils.CustomError('This command or its category has been disabled in this server.')
+            else:
+                await utils.confirm(ctx, 'This command or its category has been disabled in this server. Override?')
+        return True
 
     @commands.Cog.listener()
     async def on_command_completion(self, ctx):

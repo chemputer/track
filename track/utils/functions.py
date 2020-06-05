@@ -1,7 +1,6 @@
 from discord.ext import commands
 
 import asyncio
-from contextlib import asynccontextmanager
 import inspect
 from datetime import datetime
 
@@ -39,8 +38,8 @@ def get_signature(command):
     return signature
 
 
-async def confirm(ctx, message, timeout=30):
-    message = await ctx.send(f'{message}\nAre you sure?')
+async def confirm(ctx, text, timeout=30):
+    message = await ctx.send(f'{text}')
     await message.add_reaction('<:yes:651325958514802689>')
     await message.add_reaction('<:no:653131696169811979>')
 
@@ -50,11 +49,11 @@ async def confirm(ctx, message, timeout=30):
     try:
         reaction, user = await ctx.bot.wait_for('reaction_add', check=check, timeout=timeout)
     except asyncio.TimeoutError:
-        raise commands.UserInputError('Did not receive a response in time, aborting command.')
+        raise utils.CustomError('Did not receive a response in time, aborting action.')
     else:
         if reaction.emoji.id == 653131696169811979:
             await message.edit(content='Aborted.')
-            raise commands.CommandNotFound()  # raise error EH will ignore
+            raise utils.SilentError()
 
 
 async def fetch_user(conn, user):

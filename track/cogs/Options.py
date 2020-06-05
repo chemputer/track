@@ -15,15 +15,17 @@ class Options(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.emoji = '⚙️'
+        self.display_name = 'Options'
 
     async def cog_check(self, ctx):
-        if not (ctx.channel.permissions_for(ctx.message.author).administrator or
-                await self.bot.is_owner(ctx.author)):
-            raise commands.UserInputError('You must be an administrator to use this command.')
+        if ctx.guild is None:
+            raise commands.NoPrivateMessage()
+        elif (not await self.bot.is_owner(ctx.author) and
+              not ctx.channel.permissions_for(ctx.message.author).administrator):
+            raise utils.CustomError('You must be an administrator to use this command.')
         return True
 
     @commands.group(aliases=['prefix'], invoke_without_command=True, brief='Server prefixes.')
-    @commands.guild_only()
     async def prefixes(self, ctx):
         """
         Customize up to 10 prefixes the bot will accept for this server.
@@ -116,6 +118,7 @@ class Options(commands.Cog):
 
         **All builds that were in queue will be approved!**
         """
+        await utils.confirm(ctx, 'This action will approve all builds currently in the queue. Are you sure?')
         async with utils.Transaction(self.bot.db) as conn:
             self.bot.guild_options['builds_channel'] = None
             await conn.execute('UPDATE guilds SET builds_channel = ? WHERE id = ?', (None, ctx.guild.id))
@@ -152,12 +155,12 @@ class Options(commands.Cog):
                 return await ctx.send('Command not found.')
 
             try:
-                disabled_commands.remove(command.name)
+                disabled_commands.remove(command.qualified_name)
                 await conn.execute('UPDATE guilds SET disabled_commands = ? WHERE id = ?',
                                    (pickle.dumps(disabled_commands), ctx.guild.id))
-                await ctx.send(f'`{command.name}` enabled.')
+                await ctx.send(f'`{command.qualified_name}` enabled.')
             except KeyError:
-                await ctx.send(f'`{command.name}` already enabled.')
+                await ctx.send(f'`{command.qualified_name}` is already enabled.')
 
     @cmd.command(name='disable', brief='Disables a command.')
     async def disable_cmd(self, ctx, command):
@@ -170,13 +173,18 @@ class Options(commands.Cog):
         async with utils.Transaction(self.bot.db) as conn:
             if command is None:
                 return await ctx.send('Command not found.')
-            elif command.name in disabled_commands:
-                return await ctx.send(f'`{command.name}` already disabled.')
+            elif (command.parent is not None and command.parent.name in ['command'] or
+                  command.name in ['command']):
+                return await ctx.send('You cannot disable this command.')
+            elif command.parent is not None and command.parent.name in disabled_commands:
+                return await ctx.send(f'`{command.name}`\'s parent, `{command.parent.name}`, is already disabled.')
+            elif command.qualified_name in disabled_commands:
+                return await ctx.send(f'`{command.qualified_name}` is already disabled.')
 
-            disabled_commands.add(command.name)
+            disabled_commands.add(command.qualified_name)
             await conn.execute('UPDATE guilds SET disabled_commands = ? WHERE id = ?',
                                (pickle.dumps(disabled_commands), ctx.guild.id))
-            await ctx.send(f'`{command.name}` disabled.')
+            await ctx.send(f'`{command.qualified_name}` disabled.')
 
     @commands.group(name='category', aliases=['cat'], invoke_without_command=True, brief='Enable and disable categories.')
     async def cat(self, ctx):
@@ -211,7 +219,7 @@ class Options(commands.Cog):
                                    (pickle.dumps(disabled_cogs), ctx.guild.id))
                 await ctx.send(f'`{cog.qualified_name}` enabled.')
             except KeyError:
-                await ctx.send(f'`{cog.qualified_name}` already enabled.')
+                await ctx.send(f'`{cog.qualified_name}` is already enabled.')
 
     @cat.command(name='disable', brief='Disable a category.')
     async def disable_cat(self, ctx, category):
@@ -224,8 +232,10 @@ class Options(commands.Cog):
         async with utils.Transaction(self.bot.db) as conn:
             if cog is None:
                 return await ctx.send('Category not found.')
+            elif cog.qualified_name in ['Options']:
+                return await ctx.send('You cannot disable this category.')
             elif cog.qualified_name in disabled_cogs:
-                return await ctx.send(f'`{cog.qualified_name}` already disabled.')
+                return await ctx.send(f'`{cog.qualified_name}` is already disabled.')
 
             disabled_cogs.add(cog.qualified_name)
             await conn.execute('UPDATE guilds SET disabled_cogs = ? WHERE id = ?',

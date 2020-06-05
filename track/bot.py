@@ -1,9 +1,14 @@
 from datetime import datetime
 import os
+import sys
+import traceback
+import time
+import pickle
 
 from discord.ext import commands
 
 import config
+import utils
 
 
 class Track(commands.AutoShardedBot):
@@ -20,10 +25,12 @@ class Track(commands.AutoShardedBot):
                 if file.endswith('.py'):
                     try:
                         self.load_extension(f'{root}.{file[:-3]}'.replace("/", "."))
-                    except commands.ExtensionError as e:
-                        print(f'Failed to load extension {e.name}.')
+                    except commands.ExtensionError as error:
+                        print(f'Failed to load extension {error.name}.')
+                        traceback.print_exception(type(error), error, error.__traceback__, file=sys.stderr)
         self.load_extension('jishaku')
 
+        self.started = False
         self.uptime = datetime.utcnow()
         self.created_on = datetime.fromtimestamp(config.created_on)
         self.color = config.color  # color used to theme embeds
@@ -34,6 +41,19 @@ class Track(commands.AutoShardedBot):
             return prefixes | config.default_prefixes
         else:
             return prefixes | self.guild_options[message.guild.id]['prefixes']
+
+    async def on_message(self, message):
+        if not self.started:
+            return
+
+        await self.process_commands(message)
+
+    async def logout(self):
+        async with utils.Transaction(self.db) as conn:
+            await conn.execute('INSERT INTO stats VALUES (?, ?)',
+                               (int(time.time()), pickle.dumps(self.stats)))
+
+        await super().logout()
 
 
 if __name__ == '__main__':
