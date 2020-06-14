@@ -3,8 +3,11 @@ from discord.ext import commands
 import asyncio
 import inspect
 from datetime import datetime
+import pickle
 
 import utils
+
+DEFAULT_USER_DATA = {'contours_played': 0, 'contours_record': None, 'morning_streak': 0, 'morning_last': None, 'morning_skips': 0}
 
 
 # https://discordapp.com/developers/docs/reference#snowflakes
@@ -56,14 +59,24 @@ async def confirm(ctx, text, timeout=30):
             raise utils.SilentError()
 
 
-async def fetch_user(conn, user):
-    c = await conn.execute(f'SELECT * FROM users WHERE id = {user.id}')
-    details = await c.fetchone()
-    if details is None:
-        await conn.execute(f'INSERT INTO users VALUES (?, ?, ?)', (user.id, 0, 60.0))
-        await conn.commit()
-    c = await conn.execute(f'SELECT * FROM users WHERE id = {user.id}')
-    return await c.fetchone()
+async def fetch_user(connection, user_id):
+    async with Transaction(connection) as conn:
+        c = await conn.execute('SELECT data FROM users WHERE id = ?', (user_id,))
+        data = await c.fetchone()
+
+        if data is None:
+            await conn.execute('INSERT INTO users VALUES (?, ?)', (user_id, pickle.dumps(DEFAULT_USER_DATA)))
+            return DEFAULT_USER_DATA
+        else:
+            modified = False
+            for key, value in DEFAULT_USER_DATA.items():
+                if key not in data:
+                    data[key] = value
+                    modified = True
+            if modified:
+                await conn.execute('UPDATE users SET data = ? WHERE id = ?', (pickle.dumps(data), user_id))
+
+            return data
 
 
 class Transaction:
