@@ -98,7 +98,7 @@ class Options(commands.Cog):
         if channel_id is None:
             return await ctx.send(f'Approve-only mode is currently disabled.')
 
-        channel = await self.bot.get_channel(channel_id)
+        channel = self.bot.get_channel(channel_id)
         await ctx.send(f'Approve-only mode is currently enabled to {channel.mention}.')
 
     @approve_only.command(brief='Enables approve-only mode.')
@@ -107,7 +107,7 @@ class Options(commands.Cog):
         Enables approve-only mode for build submission on this server.
         """
         async with utils.Transaction(self.bot.db) as conn:
-            self.bot.guild_options['builds_channel'] = channel.id
+            self.bot.guild_options[ctx.guild.id]['builds_channel'] = channel.id
             await conn.execute('UPDATE guilds SET builds_channel = ? WHERE id = ?', (channel.id, ctx.guild.id))
             await ctx.send(f'Approve-only mode enabled with {channel.mention}.')
 

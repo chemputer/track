@@ -10,9 +10,9 @@ import utils
 BUKI_EMOJI_SERVERS = (552570749953507338, 611977431959732234,
                       641016852864040991, 677591786138632192)
 # Shouldn't need 13 secondary car colors, but just in case
-ESCAPE_MAPPING = {'EXIT': '➡️',
-                  'o': '▫️',
-                  'x': '⬛',
+ESCAPE_MAPPING = {'EXIT': '<:exit:721338399276924998>',
+                  'o': '<:e:721338399176523856>',
+                  'x': '<:b:721338399142707291>',
                   'A': '<:primary:691810735126478889>',
                   0: '<:esc0:691810735399108608>',
                   1: '<:esc1:691810735348646018>',
@@ -79,16 +79,22 @@ class EscapeMenu(menus.Menu):
         return board + 8 * ESCAPE_MAPPING['x']
 
     async def update_embed(self):
-        self.embed.set_field_at(0, name='Active Piece', value=ESCAPE_MAPPING[self.active])
-        self.embed.set_field_at(1, name='Board', value=self.get_board())
+        embed = self.embed.copy()
+        embed.description += '\n\n' + self.get_board()
+        embed.add_field(name='Active Piece', value=ESCAPE_MAPPING[self.active])
 
-        return await self.message.edit(embed=self.embed)
+        # self.embed.set_field_at(0, name='Active Piece', value=ESCAPE_MAPPING[self.active])
+        # self.embed.set_field_at(1, name='Board', value=self.get_board())
+
+        return await self.message.edit(embed=embed)
 
     async def send_initial_message(self, ctx, channel):
-        self.embed.add_field(name='Active Piece', value=ESCAPE_MAPPING[self.active])
-        self.embed.add_field(name='Board', value=self.get_board())
+        embed = self.embed.copy()
+        embed.description += '\n\n' + self.get_board()
+        embed.add_field(name='Active Piece', value=ESCAPE_MAPPING[self.active])
+        # self.embed.add_field(name='Board', value=self.get_board())
 
-        return await ctx.send(embed=self.embed)
+        return await ctx.send(embed=embed)
 
     @menus.button('⏹️', position=menus.Last())
     async def end(self, payload):
@@ -204,6 +210,7 @@ class Misc(commands.Cog):
         self.display_name = 'Misc'
 
     @commands.command(brief='A sliding-block game.')
+    @commands.cooldown(rate=1, per=90, type=commands.BucketType.user)
     async def escape(self, ctx, min_moves=16, max_moves=60):
         """
         An implementation of [Michael Fogleman](https://www.michaelfogleman.com/rush/)'s solved Rush Hour puzzles.

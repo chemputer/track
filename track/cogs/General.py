@@ -1,9 +1,11 @@
 from discord.ext import commands, menus
 import discord
-from datetime import datetime
 import timeago
-import sys
 import psutil
+
+from datetime import datetime
+import sys
+import typing
 
 import config
 import utils
@@ -11,35 +13,36 @@ import utils
 VISIBLE_COGS = ['General', 'Wows', 'Misc', 'Options']
 
 
+class HelpMenu(menus.Menu):
+    def __init__(self, cogs, main_embed, instance):
+        super().__init__(clear_reactions_after=True)
+        self.cogs = cogs
+        self.main_embed = main_embed
+        self.instance = instance
+        for cog in cogs:
+            self.add_button(menus.Button(cog.emoji, self.cog_embed))
+
+    async def send_initial_message(self, ctx, channel):
+        return await ctx.send(embed=self.main_embed)
+
+    @menus.button('↩️')
+    async def main(self, payload):
+        await self.message.edit(embed=self.main_embed)
+
+    @menus.button('⏹️', position=menus.Last())
+    async def end(self, payload):
+        self.stop()
+
+    async def cog_embed(self, payload):
+        for cog in self.cogs:
+            if payload.emoji.name == cog.emoji:
+                await self.message.edit(embed=await self.instance.cog_embed(cog))
+
+
 class Help(commands.HelpCommand):
     def __init__(self):
         super().__init__(command_attrs={'brief': 'Take a wild guess...',
                                         'help': 'Seriously?'})
-
-    class HelpMenu(menus.Menu):
-        def __init__(self, cogs, main_embed, instance):
-            super().__init__(clear_reactions_after=True)
-            self.cogs = cogs
-            self.main_embed = main_embed
-            self.instance = instance
-            for cog in cogs:
-                self.add_button(menus.Button(cog.emoji, self.cog_embed))
-
-        async def send_initial_message(self, ctx, channel):
-            return await ctx.send(embed=self.main_embed)
-
-        @menus.button('↩️')
-        async def main(self, payload):
-            await self.message.edit(embed=self.main_embed)
-
-        @menus.button('⏹️', position=menus.Last())
-        async def end(self, payload):
-            self.stop()
-
-        async def cog_embed(self, payload):
-            for cog in self.cogs:
-                if payload.emoji.name == cog.emoji:
-                    await self.message.edit(embed=await self.instance.cog_embed(cog))
 
     async def send_bot_help(self, mapping):
         cogs = [self.context.bot.get_cog(cog) for cog in VISIBLE_COGS]
@@ -48,20 +51,20 @@ class Help(commands.HelpCommand):
                      mention_everyone=False, send_tts_messages=False)
 
         embed = discord.Embed(title='Help',
-                              description='A bot with WoWS related utilities and more.\n'
-                                          'Contact Trackpad#1234 for issues.\n'
-                                          'This bot is currently WIP.',
+                              description='A niche bot focused on providing WoWS utilities.\n'
+                                          'Contact Trackpad#1234 for issues.',
                               color=self.context.bot.color)
         embed.add_field(name='Command Categories',
                         value='\n'.join([f'{cog.emoji} {cog.display_name}' for cog in cogs]))
         embed.add_field(name='Links',
                         value=f'[Invite me here!]({discord.utils.oauth_url(self.context.bot.user.id, perms)})\n'
-                              f'[Support server](https://discord.gg/dU39sjq)\n'
-                              f'[Need WoWS help?](https://discord.gg/c4vK9rM)\n')
+                              '[Support server](https://discord.gg/dU39sjq)\n'
+                              '[Source code](https://github.com/padtrack/track)\n'
+                              '[Need WoWS help?](https://discord.gg/c4vK9rM)\n')
         embed.set_thumbnail(url='https://cdn.discordapp.com/attachments/651324664496521225/651326808423137300/thumbnail.png')
         embed.set_footer(text='Use the below reactions or help <category> / help <command> to view details')
 
-        await self.HelpMenu(cogs, embed, self).start(self.context)
+        await HelpMenu(cogs, embed, self).start(self.context)
 
     async def send_cog_help(self, cog):
         await self.context.send(embed=await self.cog_embed(cog))
@@ -271,6 +274,45 @@ class General(commands.Cog):
         #                 inline=False)
 
         await ctx.send(embed=embed)
+
+    @commands.command(brief='Get user profile.')
+    async def profile(self, ctx, user: typing.Union[commands.UserConverter, int] = None):
+        """
+        Get user profile.
+        """
+        if user is None:
+            data = await utils.fetch_user(self.bot.db, ctx.author.id)
+        elif isinstance(user, discord.User):
+            data = await utils.fetch_user(self.bot.db, user.id)
+        else:
+            data = await utils.fetch_user(self.bot.db, ctx.author.id)
+
+        embed = discord.Embed(title='User Details',
+                              color=self.bot.color)
+
+        if data['contours_record'] is None:
+            embed.add_field(name='Contours',
+                            value='No data yet.')
+        else:
+            embed.add_field(name='Contours',
+                            value=f'Guessed: `{data["contours_played"]}`\n'
+                                  f'Record: `{data["contours_record"]:.3f}s`')
+
+        if ctx.guild.id == 590412879119777799:
+            if data['morning_last'] is None:
+                embed.add_field(name='Morning',
+                                value='No data yet.')
+            else:
+                embed.add_field(name='Morning',
+                                value=f'Streak: {data["morning_streak"]}\n'
+                                      f'Skips: {data["morning_skips"]}')
+
+        await ctx.send(embed=embed)
+
+    @profile.error
+    async def profile_error(self, ctx, error):
+        if isinstance(error, commands.BadUnionArgument):
+            await ctx.send('Failed to find that user.')
 
 
 def setup(bot):
