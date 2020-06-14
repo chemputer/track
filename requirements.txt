@@ -17,3 +17,4 @@ lxml
 imageio
 imageio-ffmpeg
 numpy
+hashids
