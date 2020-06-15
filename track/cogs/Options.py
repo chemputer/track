@@ -143,7 +143,7 @@ class Options(commands.Cog):
         await ctx.send(embed=embed)
 
     @cmd.command(name='enable', brief='Enable a command.')
-    async def enable_cmd(self, ctx, command):
+    async def enable_cmd(self, ctx, *, command):
         """
         Enable a command.
         """
@@ -163,7 +163,7 @@ class Options(commands.Cog):
                 await ctx.send(f'`{command.qualified_name}` is already enabled.')
 
     @cmd.command(name='disable', brief='Disables a command.')
-    async def disable_cmd(self, ctx, command):
+    async def disable_cmd(self, ctx, *, command):
         """
         Disable a command.
         """
@@ -202,7 +202,7 @@ class Options(commands.Cog):
         await ctx.send(embed=embed)
 
     @cat.command(name='enable', brief='Enable a category.')
-    async def enable_cat(self, ctx, category):
+    async def enable_cat(self, ctx, *, category):
         """
         Enable a category.
         """
@@ -222,7 +222,7 @@ class Options(commands.Cog):
                 await ctx.send(f'`{cog.qualified_name}` is already enabled.')
 
     @cat.command(name='disable', brief='Disable a category.')
-    async def disable_cat(self, ctx, category):
+    async def disable_cat(self, ctx, *, category):
         """
         Disable a category.
         """

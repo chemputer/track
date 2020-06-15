@@ -275,26 +275,26 @@ class Misc(commands.Cog):
         pages = menus.MenuPages(source=SplitEmojis(emojis), clear_reactions_after=True)
         await pages.start(ctx)
 
-    @buki.command(brief='Converts %wrapped bukis%.')
-    @commands.cooldown(rate=1, per=15, type=commands.BucketType.user)
-    async def convert(self, ctx, *, string):
-        """
-        Converts %-wrapped bukis in the input string to their emoji equivalents.
-
-        Mentions are escaped.
-        """
-        string = discord.utils.escape_mentions(string)
-        emojis = [emoji for server in BUKI_EMOJI_SERVERS for emoji in self.bot.get_guild(server).emojis]
-
-        def replace(match):
-            for emoji in emojis:
-                if (emoji.name.lower() == match.group(0)[1:-1].lower() or
-                        emoji.name.lower() == 'buki' + match.group(0)[1:-1].lower()):
-                    return str(emoji)
-            return match.group(0)
-
-        pattern = re.compile('%[^%]+%')
-        await ctx.send(re.sub(pattern, replace, string))
+    # @buki.command(brief='Converts %wrapped bukis%.')
+    # @commands.cooldown(rate=1, per=15, type=commands.BucketType.user)
+    # async def convert(self, ctx, *, string):
+    #     """
+    #     Converts %-wrapped bukis in the input string to their emoji equivalents.
+    #
+    #     Mentions are escaped.
+    #     """
+    #     string = discord.utils.escape_mentions(string)
+    #     emojis = [emoji for server in BUKI_EMOJI_SERVERS for emoji in self.bot.get_guild(server).emojis]
+    #
+    #     def replace(match):
+    #         for emoji in emojis:
+    #             if (emoji.name.lower() == match.group(0)[1:-1].lower() or
+    #                     emoji.name.lower() == 'buki' + match.group(0)[1:-1].lower()):
+    #                 return str(emoji)
+    #         return match.group(0)
+    #
+    #     pattern = re.compile('%[^%]+%')
+    #     await ctx.send(re.sub(pattern, replace, string))
 
     @buki.command(brief='Not mom\'s lasagna.')
     @commands.cooldown(rate=1, per=15, type=commands.BucketType.user)

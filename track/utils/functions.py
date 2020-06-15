@@ -66,7 +66,7 @@ async def fetch_user(connection, user_id):
 
         if data is None:
             await conn.execute('INSERT INTO users VALUES (?, ?)', (user_id, pickle.dumps(DEFAULT_USER_DATA)))
-            return DEFAULT_USER_DATA
+            return DEFAULT_USER_DATA.copy()
         else:
             modified = False
             for key, value in DEFAULT_USER_DATA.items():

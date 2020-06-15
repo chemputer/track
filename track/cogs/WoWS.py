@@ -386,8 +386,7 @@ class APMenu(menus.Menu):
 
         embed = discord.Embed(title=self.bot.globalmo[f'IDS_{upgrade.upper()}'],
                               description=f'Data extracted from WoWS {VERSION}.\n'
-                                          'Use the reactions to cycle through pages and toggle the fire chance signals, '
-                                          'Demolition Expert, and Basic Firing Training.',
+                                          'Use the reactions to cycle through pages.',
                               color=self.bot.color)
         embed.set_author(icon_url=WG_LOGO, name=f'{self.ship.pretty_name}\'s AP ({self.current + 1}/{self.pages})')
 
@@ -950,8 +949,8 @@ class WoWS(commands.Cog, name='Wows'):
         def check(m):
             return unidecode(m.content.lower().replace('-', '').replace('.', '').replace(' ', '')) in cleaned
 
+        message = None
         menu = GuessMenu(discord.File(fp, filename=f'guess.png'), tiers, accepted)
-
         await menu.start(ctx)
         start = datetime.now()
         try:
@@ -972,19 +971,30 @@ class WoWS(commands.Cog, name='Wows'):
                         return await ctx.send(f'Time\'s up. Accepted Answers:\n- ' + '\n- '.join(accepted))
                     return
 
-        menu.stop()
-        time = (datetime.now() - start).total_seconds()
-        data = await utils.fetch_user(self.bot.db, message.author.id)
+        if message is not None:
+            menu.stop()
+            time = (datetime.now() - start).total_seconds()
+            data = await utils.fetch_user(self.bot.db, message.author.id)
 
-        result = f'Well done, {message.author.mention}!\nTime taken: `{time:.3f}s`. '
-        if data['contours_record'] is None or time < data['contours_record']:
-            result += 'A new record!'
-            data['contours_record'] = time
-        data['contours_played'] += 1
+            result = f'Well done, {message.author.mention}!\nTime taken: `{time:.3f}s`. '
+            if data['contours_record'] is None or time < data['contours_record']:
+                result += 'A new record!'
+                data['contours_record'] = time
+            data['contours_played'] += 1
 
-        await ctx.send(result)
-        async with utils.Transaction(self.bot.db) as conn:
-            await conn.execute('UPDATE users SET data = ? WHERE id = ?', (pickle.dumps(data), message.author.id))
+            await ctx.send(result)
+            async with utils.Transaction(self.bot.db) as conn:
+                await conn.execute('UPDATE users SET data = ? WHERE id = ?', (pickle.dumps(data), message.author.id))
+
+    # @commands.command(aliases=['maplesyrup'], brief='View ships\'s historical data.')
+    # async def histdata(self, ctx,):
+    #     """
+    #     View the historical performance for specified ships over time.
+    #
+    #     Uses data from [Suihei Koubou](http://maplesyrup.sweet.coocan.jp/wows/).
+    #     Uses unit-based data; i.e. the normal dataset.
+    #     """
+    #     pass
 
 
 def setup(bot):

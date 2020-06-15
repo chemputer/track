@@ -1,6 +1,5 @@
 from collections import Counter
 from datetime import datetime
-import time
 import traceback
 import sys
 import pickle
@@ -11,7 +10,9 @@ import aiosqlite
 import config
 import utils
 
-DEFAULT_GUILD_SETTINGS = (pickle.dumps(config.default_prefixes), None, pickle.dumps(set()), pickle.dumps(set()))
+DEFAULT_GUILD_SETTINGS = {'prefixes': config.default_prefixes, 'builds_channel': None,
+                          'disabled_commands': set(), 'disabled_cogs': set()}
+DEFAULT_GUILD_ROW = (pickle.dumps(config.default_prefixes), None, pickle.dumps(set()), pickle.dumps(set()))
 
 
 def dict_factory(cursor, row):
@@ -47,8 +48,8 @@ class Core(commands.Cog):
             # Check if bot was invited to new guilds while offline
             for guild in self.bot.guilds:
                 if guild.id not in self.bot.guild_options:
-                    self.bot.guild_options[guild.id] = DEFAULT_GUILD_SETTINGS
-                    await conn.execute('INSERT INTO guilds VALUES (?, ?, ?, ?, ?)', (guild.id,) + DEFAULT_GUILD_SETTINGS)
+                    self.bot.guild_options[guild.id] = DEFAULT_GUILD_SETTINGS.copy()
+                    await conn.execute('INSERT INTO guilds VALUES (?, ?, ?, ?, ?)', (guild.id,) + DEFAULT_GUILD_ROW)
 
             # Get latest row of stats
             c = await conn.execute('SELECT stats FROM stats ORDER BY stats DESC LIMIT 1')
@@ -70,9 +71,9 @@ class Core(commands.Cog):
 
     @commands.Cog.listener()
     async def on_guild_join(self, guild):
-        self.bot.guild_options[guild.id] = DEFAULT_GUILD_SETTINGS
+        self.bot.guild_options[guild.id] = DEFAULT_GUILD_SETTINGS.copy()
         async with utils.Transaction(self.bot.db) as conn:
-            await conn.execute('INSERT INTO guilds VALUES (?, ?, ?, ?, ?)', (guild.id,) + DEFAULT_GUILD_SETTINGS)
+            await conn.execute('INSERT INTO guilds VALUES (?, ?, ?, ?, ?)', (guild.id,) + DEFAULT_GUILD_ROW)
 
     @commands.Cog.listener()
     async def on_command_error(self, ctx, error):
