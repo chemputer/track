@@ -6,29 +6,13 @@ import sqlite3
 
 
 class GPEncode(json.JSONEncoder):
-    def default(self, o):  # pylint: disable=E0202
-        def has_dict(o):
-            try:
-                o.__dict__
-                return True
-            except AttributeError:
-                return False
-
-        if has_dict(o):
-            t = o.__dict__
-            for key in t:
-                if isinstance(t[key], str):
-                    try:
-                        t[key].decode('utf8')
-                    except:
-                        try:
-                            t[key] = t[key].decode('MacCyrillic')
-                        except:
-                            try:
-                                t[key] = t[key].encode('hex')
-                            except:
-                                pass
+    def default(self, o):
+        try:
+            for e in ['Cameras', 'DockCamera', 'damageDistribution']:
+                o.__dict__.pop(e, o.__dict__)
             return o.__dict__
+        except:
+            return {}
 
 
 print('Opening "Gameparams.data".')
@@ -42,7 +26,8 @@ print('Deflating data.')
 deflate = struct.pack('B' * len(data), *data[::-1])
 print('Decompressing data.')
 decompressed = zlib.decompress(deflate)
-pickle_data = pickle.loads(decompressed, encoding='MacCyrillic')
+# pickle_data = pickle.loads(decompressed, encoding='MacCyrillic')
+pickle_data = pickle.loads(decompressed, encoding='latin1')
 print('Converting to dict.')
 raw = json.loads(json.dumps(pickle_data, cls=GPEncode, sort_keys=True, indent=4, separators=(',', ': ')))
 print('Getting entity types.')
