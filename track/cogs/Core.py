@@ -113,11 +113,11 @@ class Core(commands.Cog):
         traceback.print_exception(type(error), error, error.__traceback__, file=sys.stderr)
 
     async def bot_check_once(self, ctx):
-        options = self.bot.guild_options[ctx.guild.id]
-
         if ctx.guild is None:
             return True
-        elif (ctx.command.parent is not None and ctx.command.parent.name in options['disabled_commands'] or
+
+        options = self.bot.guild_options[ctx.guild.id]
+        if (ctx.command.parent is not None and ctx.command.parent.name in options['disabled_commands'] or
                 ctx.command.qualified_name in options['disabled_commands'] or
                 ctx.command.cog.qualified_name in options['disabled_cogs']):
             if (not await self.bot.is_owner(ctx.author) and

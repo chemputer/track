@@ -1,5 +1,7 @@
 from discord.ext import commands
 
+import utils
+
 
 class SetValue(commands.Converter):
     def __init__(self, accepted, case_sensitive=False):
@@ -14,9 +16,9 @@ class SetValue(commands.Converter):
             argument = argument.lower()
 
         if argument not in self.accepted:
-            paramater = list(ctx.command.clean_params.keys())[len(ctx.args) - 2]  # -2 removes Cog and Context object
-            raise commands.UserInputError(f'Parameter `{paramater}` must be one of the following: {", ".join(self.accepted)} '
-                                          f'({"not " if not self.case_sensitive else ""}case sensitive)')
+            parameter = list(ctx.command.clean_params.keys())[len(ctx.args) - 2]  # -2 removes Cog and Context object
+            raise utils.CustomError(f'Parameter `{parameter}` must be one of the following: {", ".join(self.accepted)} '
+                                    f'({"not " if not self.case_sensitive else ""}case sensitive)')
         return argument
 
 
