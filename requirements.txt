@@ -1,6 +1,9 @@
+matplotlib
+pandas
+beautifulsoup4
+aiohttp
 psutil
 timeago
-matplotlib
 discord.py
 aiosqlite
 jishaku
@@ -18,3 +21,4 @@ imageio
 imageio-ffmpeg
 numpy
 hashids
+seaborn

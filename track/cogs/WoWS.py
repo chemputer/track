@@ -5,6 +5,11 @@ from PIL import Image
 from hashids import Hashids
 from unidecode import unidecode
 import polib
+import aiohttp
+from bs4 import BeautifulSoup
+import pandas
+import seaborn as sns
+import matplotlib
 
 import collections
 import json
@@ -15,6 +20,9 @@ import pickle
 from typing import Dict, Tuple, NamedTuple, List
 from datetime import datetime
 import asyncio
+import sqlite3
+import logging
+import random
 
 import config
 import utils
@@ -38,6 +46,11 @@ class Ship(NamedTuple):
     pretty_name: str
     short_name: str
     params: dict
+
+
+class MSShip(NamedTuple):
+    name: str
+    regions: dict
 
 
 # T1 can meet T1-T1, T2 can meet T2-T3, T3 can meet T2-4, etc.
@@ -72,6 +85,7 @@ _base_fp = {3: 0.9667, 4: 0.9001, 5: 0.8335, 6: 0.7669, 7: 0.7003, 8: 0.6337, 9:
 
 REGION_CODES = ['na', 'eu', 'ru', 'asia']
 VERSION = '0.9.4.1'
+MAPLESYRUP_URL = 'http://maplesyrup.sweet.coocan.jp/wows/shipstatswk/'
 SKILL_NICKNAMES = {'1': ['bft'], '2': ['bos'], '3': ['em'], '4': ['tae'],
                    '5': ['ha'], '7': ['vig', 'vigi'], '8': ['de'], '9': ['aft'],
                    '10': ['aa', 'plane armor', 'pa'], '11': ['ieb'], '12': ['ce'], '13': ['joat'],
@@ -98,7 +112,7 @@ SIMILAR_SHIPS: List[Tuple] = [('PASB017', 'PASB510'),  # Montana, Ohio
                               ('PFSD110', 'PFSD210'),  # Kleber, Marceau
                               ('PWSD110', 'PWSD610')]  # Halland, Smaland
 WG_LOGO = 'https://cdn.discordapp.com/attachments/651324664496521225/651332148963442688/logo.png'
-DEFAULT_GROUPS = ('start', 'peculiar', 'demoWithoutStats', 'special', 'ultimate',
+DEFAULT_GROUPS = ('start', 'peculiar', 'demoWithoutStats', 'earlyAccess', 'special', 'ultimate',
                   'specialUnsellable', 'upgradeableExclusive', 'upgradeable')
 GUESS_GROUPS = ('start', 'peculiar', 'special', 'ultimate',
                 'specialUnsellable', 'upgradeableExclusive', 'upgradeable')
@@ -112,6 +126,13 @@ BASE_FP: Dict[Tier, float] = {k: v for k, v in _base_fp.items()}
 
 # excluded i, I, 1, O, 0 from Base62 to prevent confusion
 hashids = Hashids(min_length=3, alphabet='abcdefghjklmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789')
+logging.getLogger('aiosqlite').setLevel(logging.CRITICAL)
+sns.set(style='dark', font='Trebuchet MS', font_scale=0.9, rc={'axes.facecolor': (0, 0, 0, 0),
+                                          'text.color': 'white',
+                                          'axes.labelcolor': 'white',
+                                          'xtick.color': 'white',
+                                          'ytick.color': 'white'})
+matplotlib.use('agg')
 
 Regions = collections.namedtuple('Regions', REGION_CODES)
 
@@ -149,6 +170,119 @@ class Builds(commands.Converter):
             await pages.start(ctx)
         else:
             return builds[0] if self.one else builds
+
+
+class Ships(commands.Converter):
+    def __init__(self, one=False, groups=DEFAULT_GROUPS, ignored_chars=(' ', '-', '.')):
+        """
+        Groups:
+
+        event - Event ships.
+        start - The tier 1 ships.
+        peculiar - The ARP and Chinese Dragon ships.
+        earlyAccess - Early access ships. Sometimes actually a test ship with stats tracked.
+        demoWithoutStats - Test ships, stats not tracked.
+        special - Premium ships.
+        disabled - Misc. disabled ships, such as Kitakami and Tone...
+        ultimate - The tier 10 reward ships.
+        clan - Rental ships for CB.
+        specialUnsellable - Ships you can't sell, like Flint, Missouri, and Alabama ST.
+        preserved - Leftover ships such as the RTS carriers and pre-split RU DDs.
+        unavailable - Inaccessible ships such as Operation enemies.
+        upgradeableExclusive - Free EXP ships such as Nelson and Alaska.
+        upgradeable - Normal tech-tree ships.
+        """
+        self.one = one
+        self.groups = groups
+        self.ignored_chars = ignored_chars
+
+    def clean(self, string):
+        for char in self.ignored_chars:
+            string = string.replace(char, '')
+        return string.lower()
+
+    async def fetch(self, ctx, name):
+        c = await ctx.bot.gameparams.execute('SELECT value FROM Ship WHERE id = ?', (name,))
+        return await c.fetchone()
+
+    async def convert(self, ctx, argument):
+        ships = []
+        for ship in ctx.bot.ships:
+            try:
+                pretty_name = ctx.bot.globalmo[f'IDS_{ship["index"]}_FULL']
+                short_name = ctx.bot.globalmo[f'IDS_{ship["index"]}']
+            except KeyError:
+                continue
+
+            cleaned = self.clean(unidecode(argument))
+            cleaned_pretty = self.clean(unidecode(pretty_name))
+            cleaned_short = self.clean(unidecode(short_name))
+
+            if cleaned == cleaned_pretty or cleaned == cleaned_short:
+                if ship['group'] in self.groups:
+                    return (Ship(pretty_name, short_name, await self.fetch(ctx, ship['name'])) if self.one
+                            else [Ship(pretty_name, short_name, await self.fetch(ctx, ship['name']))])
+            elif cleaned in cleaned_pretty or cleaned in cleaned_short:
+                # there are old versions of some ships left in the game code
+                # will only include them in the results if user requests it
+                if ('old' in cleaned_pretty or 'old' in cleaned_short) and 'old' not in cleaned:
+                    continue
+
+                if len(ships) == 5:
+                    raise utils.CustomError('>5 ships returned by query. Be more specific.')
+                if ship['group'] in self.groups:
+                    ships.append(Ship(pretty_name, short_name, await self.fetch(ctx, ship['name'])))
+
+        if not ships:
+            raise utils.CustomError('No ships found.')
+        elif self.one and len(ships) > 1:
+            raise utils.CustomError('Multiple ships found. Retry with one of the following:\n' +
+                                    '\n'.join([ship.pretty_name for ship in ships]))
+        else:
+            return ships[0] if self.one else ships
+
+
+class MSConverter(commands.Converter):
+    def __init__(self,  ignored_chars=(' ', '-', '.')):
+        self.ignored_chars = ignored_chars
+
+    def clean(self, string):
+        for char in self.ignored_chars:
+            string = string.replace(char, '')
+        return string.lower()
+
+    async def get_data(self, ctx, name, regions):
+        data = {}
+        for region in regions:
+            c = await ctx.bot.maplesyrup.execute(f'SELECT * FROM "{region}_{name}"')
+            data[region] = [sample async for sample in c]
+
+        return MSShip(name, data)
+
+    async def convert(self, ctx, argument):
+        ships = []
+        for name, regions in ctx.bot.ms_ships.items():
+            cleaned_arg = self.clean(argument)
+            cleaned_name = self.clean(name)
+            if cleaned_arg == cleaned_name:
+                return await self.get_data(ctx, name, regions)
+            elif cleaned_arg in cleaned_name:
+                if 'old' in cleaned_name and 'old' not in cleaned_arg:
+                    continue
+
+                if len(ships) == 5:
+                    raise utils.CustomError('>5 ships returned by query. Be more specific.')
+                if '[' not in name:
+                    ships.append((name, regions))
+
+        if not ships:
+            raise utils.CustomError('No ships found.')
+        elif len(ships) > 1:
+            raise utils.CustomError('Multiple ships found. Retry with one of the following:\n' +
+                                    '\n'.join([ship[0] for ship in ships]))
+        else:
+            ship = ships.pop()
+            return await self.get_data(ctx, ship[0], ship[1])
 
 
 class BuildsPages(menus.ListPageSource):
@@ -267,9 +401,9 @@ class HEMenu(menus.Menu):
                 reduction = BASE_FP[tier] * 0.95 * 0.9
                 base = reduction * (fire_chance + signals_bonus + de_bonus)
                 ifhe = reduction * (0.5 * fire_chance + signals_bonus + de_bonus)
-                fires = ('Configured Fire Chance (w/ & w/out IFHE):\n'
+                fires = ('Configured Fire Chance (no IFHE & IFHE):\n'
                          f'`{base * 100:.2f}%` -> `{ifhe * 100:.2f}%`\n'
-                         'Configured E(t) of fire (w/ & w/out IFHE):\n'
+                         'Configured E(t) of fire (no IFHE & IFHE):\n'
                          f'`{(reload * bft_bonus) / base / barrels / 0.3:.2f}s` -> `{(reload * bft_bonus) / ifhe / barrels / 0.3:.2f}s`')
 
             embed.add_field(name='Details' if species == 'Main' else self.bot.globalmo[f'IDS_{ammo_params["name"].upper()}'],
@@ -486,73 +620,6 @@ class GuessMenu(menus.Menu):
         self.stop()
 
 
-class Ships(commands.Converter):
-    def __init__(self, one=False, groups=DEFAULT_GROUPS, ignored_chars=(' ', '-', '.')):
-        """
-        Groups:
-
-        event - Event ships.
-        start - The tier 1 ships.
-        peculiar - The ARP and Chinese Dragon ships.
-        demoWithoutStats - Ships currently in testing.
-        special - Premium ships.
-        disabled - Misc. disabled ships, such as Kitakami and Tone...
-        ultimate - The tier 10 reward ships.
-        clan - Rental ships for CB.
-        specialUnsellable - Ships you can't sell, like Flint, Missouri, and Alabama ST.
-        preserved - Leftover ships such as the RTS carriers and pre-split RU DDs.
-        unavailable - Inaccessible ships such as Operation enemies.
-        upgradeableExclusive - Free EXP ships such as Nelson and Alaska.
-        upgradeable - Normal tech-tree ships.
-        """
-        self.one = one
-        self.groups = groups
-        self.ignored_chars = ignored_chars
-
-    def clean(self, string):
-        for char in self.ignored_chars:
-            string = string.replace(char, '')
-        return string.lower()
-
-    async def convert(self, ctx, argument):
-        c = await ctx.bot.gameparams.execute('SELECT value FROM Ship')
-
-        ships = []
-        async for ship in c:
-            try:
-                pretty_name = ctx.bot.globalmo[f'IDS_{ship["index"]}_FULL']
-                short_name = ctx.bot.globalmo[f'IDS_{ship["index"]}']
-            except KeyError:
-                continue
-
-            cleaned = self.clean(unidecode(argument))
-            cleaned_pretty = self.clean(unidecode(pretty_name))
-            cleaned_short = self.clean(unidecode(short_name))
-
-            if cleaned == cleaned_pretty or cleaned == cleaned_short:
-                if ship['group'] in self.groups:
-                    return (Ship(pretty_name, short_name, ship) if self.one
-                            else [Ship(pretty_name, short_name, ship)])
-            elif cleaned in cleaned_pretty or cleaned in cleaned_short:
-                # there are old versions of some ships left in the game code
-                # will only include them in the results if user requests it
-                if ('old' in cleaned_pretty or 'old' in cleaned_short) and 'old' not in argument.lower():
-                    continue
-
-                if len(ships) == 5:
-                    raise utils.CustomError('>5 ships returned by query. Be more specific.')
-                if ship['group'] in self.groups:
-                    ships.append(Ship(pretty_name, short_name, ship))
-
-        if not ships:
-            raise utils.CustomError('No ships found.')
-        elif self.one and len(ships) > 1:
-            raise utils.CustomError('Multiple ships found. Retry with one of the following:\n' +
-                                    '\n'.join([ship.pretty_name for ship in ships]))
-        else:
-            return ships[0] if self.one else ships
-
-
 class WoWS(commands.Cog, name='Wows'):
     """
     World of Warships commands.
@@ -570,6 +637,32 @@ class WoWS(commands.Cog, name='Wows'):
 
         self.skills = self.api.na.encyclopedia.crewskills().data
         self.bot.globalmo = {entry.msgid: entry.msgstr for entry in polib.mofile('assets/private/global.mo')}
+
+        self.bot.ships = []
+        with sqlite3.connect('assets/private/gameparams.db') as conn:
+            c = conn.execute('SELECT * FROM Ship')
+
+            for ship, params_blob in c.fetchall():
+                params = pickle.loads(params_blob)
+                self.bot.ships.append({'name': params['name'],
+                                       'index': params['index'],
+                                       'level': params['level'],
+                                       'group': params['group'],
+                                       'typeinfo': params['typeinfo']})
+
+        self.bot.ms_ships = {}
+        with sqlite3.connect('assets/private/maplesyrup.db') as conn:
+            c = conn.execute('SELECT name FROM sqlite_master WHERE type=\'table\'')
+            tables = [table[0] for table in c.fetchall()]  # flatten
+
+            for table in tables:
+                if table != 'record':
+                    split = table.index('_')
+                    region = table[:split]
+                    ship = table[split + 1:]
+                    if ship not in self.bot.ms_ships:
+                        self.bot.ms_ships[ship] = {'na': False, 'eu': False, 'ru': False, 'asia': False}
+                    self.bot.ms_ships[ship][region] = True
 
     @commands.command(hidden=True, brief='Link your WG account!')
     async def link(self, ctx, region: utils.SetValue(REGION_CODES)):
@@ -598,6 +691,52 @@ class WoWS(commands.Cog, name='Wows'):
         """
         self.skills = self.api.na.encyclopedia.crewskills().data
         print(json.dumps(self.skills, indent=4))
+        await ctx.send('Done.')
+
+    @commands.command(hidden=True, brief='Updates maplesyrup data.')
+    @commands.is_owner()
+    async def update_ms(self, ctx):
+        pattern = re.compile(r'(\w+)/\w+_(\w+)')
+
+        async with utils.Transaction(self.bot.maplesyrup) as conn:
+            await conn.execute('CREATE TABLE IF NOT EXISTS record (id TEXT PRIMARY KEY)')
+
+            async with aiohttp.ClientSession() as cs:
+                async with cs.get(MAPLESYRUP_URL) as index:
+                    soup = BeautifulSoup(await index.text(), 'html.parser')
+                    table = soup.find('table')
+
+                    links = []
+                    for row in table.findAll("tr")[1:]:
+                        for cell in row:
+                            link = cell.find('a')
+                            if link is not None and link != -1:
+                                match = re.search(pattern, link['href'])
+                                try:
+                                    await conn.execute('INSERT INTO record VALUES (?)', (f'{match[1]}_{match[2]}',))
+                                    links.append({'region': match[1], 'date': int(match[2]), 'link': link['href'][2:]})
+                                except sqlite3.IntegrityError:
+                                    pass
+
+                    if not links:
+                        return await ctx.send('No new data to process.')
+
+                    await utils.confirm(ctx, f'`{len(links)}` to process. Continue?')
+
+                    for count, link in enumerate(links, start=1):
+                        print(f'Processing link {count} of {len(links)}.')
+
+                        async with cs.get(MAPLESYRUP_URL + link['link']) as html:
+                            dataframe = pandas.read_html(await html.text())[0]
+
+                            for index, series in dataframe.iterrows():
+                                dict_ver = series.to_dict()
+                                name = link['region'] + '_' + dict_ver[('name', 'name')]
+                                await conn.execute(f'CREATE TABLE IF NOT EXISTS "{name}" (date INTEGER PRIMARY KEY, data BLOB)')
+                                await conn.execute(f'INSERT INTO "{name}" VALUES (?, ?)', (link['date'], pickle.dumps(dict_ver)))
+                        await asyncio.sleep(0.25)
+
+        await ctx.send('Done.')
 
     def convert_skill(self, string):
         for skill, data in self.skills.items():
@@ -641,7 +780,7 @@ class WoWS(commands.Cog, name='Wows'):
         embed.add_field(name='Author',
                         value=f'<@{build["author"]}>')
         embed.set_footer(text=f'ID: {hashids.encode(build["rowid"])}\n{build["total"]}/19 points')
-        embed.set_image(url=f'attachment://build.png')
+        embed.set_image(url='attachment://build.png')
 
         return embed
 
@@ -655,7 +794,7 @@ class WoWS(commands.Cog, name='Wows'):
         Queries search by ID, title, and author.
         """
         image = await self.bot.loop.run_in_executor(ThreadPoolExecutor(), self.skills_image, build['skills'])
-        await ctx.send(file=discord.File(image, filename=f'build.png'), embed=self.build_embed(build))
+        await ctx.send(file=discord.File(image, filename='build.png'), embed=self.build_embed(build))
 
     @builds.command(aliases=['add'], brief='Create a new build.')
     @commands.cooldown(rate=1, per=10, type=commands.BucketType.user)
@@ -895,8 +1034,8 @@ class WoWS(commands.Cog, name='Wows'):
         embed.add_field(name='​', value='​')  # Zero Width Spaces, (11 thresholds -> 3x4)
         await ctx.send(embed=embed)
 
-    @commands.command(aliases=['contours'], brief='"Who\'s that ~~pokemon~~ ship?"')
-    @commands.cooldown(rate=1, per=10, type=commands.BucketType.user)
+    @commands.command(aliases=['contours'], brief='Who\'s that ~~pokemon~~ ship?')
+    @commands.cooldown(rate=1, per=5, type=commands.BucketType.user)
     async def guess(self, ctx, tiers: commands.Greedy[int] = (6, 7, 8, 9, 10)):
         """
         A guessing minigame inspired by "Who's that pokemon?".
@@ -915,10 +1054,10 @@ class WoWS(commands.Cog, name='Wows'):
         if len(tiers) != len(set(tiers)):
             return await ctx.send('You cannot have duplicate tiers.')
 
+        copy = self.bot.ships.copy()
+        random.shuffle(copy)
         answer = None
-        c = await self.bot.gameparams.execute('SELECT value FROM Ship ORDER BY random()')
-
-        async for ship in c:
+        for ship in copy:
             try:
                 name = self.bot.globalmo[f'IDS_{ship["index"]}_FULL']
             except KeyError:
@@ -986,15 +1125,59 @@ class WoWS(commands.Cog, name='Wows'):
             async with utils.Transaction(self.bot.db) as conn:
                 await conn.execute('UPDATE users SET data = ? WHERE id = ?', (pickle.dumps(data), message.author.id))
 
-    # @commands.command(aliases=['maplesyrup'], brief='View ships\'s historical data.')
-    # async def histdata(self, ctx,):
-    #     """
-    #     View the historical performance for specified ships over time.
-    #
-    #     Uses data from [Suihei Koubou](http://maplesyrup.sweet.coocan.jp/wows/).
-    #     Uses unit-based data; i.e. the normal dataset.
-    #     """
-    #     pass
+    @commands.command(aliases=['maplesyrup'], brief='View ships\'s historical data.')
+    async def histdata(self, ctx, graph: utils.SetValue(['battles', 'winrate', 'damage']), *, ship: MSConverter):
+        """
+        View the historical performance for specified ships over time.
+
+        Uses data from [Suihei Koubou](http://maplesyrup.sweet.coocan.jp/wows/).
+        Uses unit-based data; i.e. the normal dataset.
+        """
+        data = {region: {} for region in ship.regions}
+        for region, samples in ship.regions.items():
+            for sample in samples:
+                string = str(sample['date'])
+                unix = datetime(year=int(string[0:4]),
+                                month=int(string[4:6]),
+                                day=int(string[6:8])).timestamp()
+
+                if graph == 'battles':
+                    data[region][unix] = sample['data'][('total battles', 'total battles')]
+                elif graph == 'winrate':
+                    data[region][unix] = sample['data'][('average of rates', 'win')]
+                else:
+                    data[region][unix] = sample['data'][('average of rates', 'damagecaused')]
+
+        def generate_image():
+            fp = io.BytesIO()
+
+            times = list(max(data.values(), key=len).keys())
+
+            formatted = {'Time': times}
+            for region, points in data.items():
+                formatted[region] = [None if time not in times else observation
+                                     for time, observation in points.items()]
+            for value in formatted.values():
+                print(len(value))
+
+            df = pandas.DataFrame(formatted)
+            g = sns.lineplot(x='Time', y=graph.title(), hue='Regions', palette=sns.color_palette("mako_r", 4),
+                             data=pandas.melt(df, ['Time'], var_name='Regions', value_name=graph.title()))
+            dates = [pandas.to_datetime(tm, unit='s').strftime('%Y-%m-%d') for tm in g.get_xticks()]
+            g.set_xticklabels(dates, rotation=40)
+            g.figure.suptitle(f'{ship.name}: {graph.title()} vs. Time', y=0.95)
+            g.figure.subplots_adjust(bottom=0.25, top=0.875, left=0.150, right=0.975)
+            g.get_legend().get_frame().set_facecolor((0.1, 0.1, 0.1, 0))
+            g.axes.xaxis.labelpad = 11
+            g.axes.yaxis.labelpad = 11
+
+            g.figure.savefig(fp, facecolor=(0, 0, 0, 0), edgecolor='none')
+            g.figure.clf()
+            fp.seek(0)
+            return fp
+
+        image = await self.bot.loop.run_in_executor(ThreadPoolExecutor(), generate_image)
+        await ctx.send(file=discord.File(image, 'graph.png'))
 
 
 def setup(bot):
