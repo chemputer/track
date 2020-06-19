@@ -110,13 +110,17 @@ SIMILAR_SHIPS: List[Tuple] = [('PASB017', 'PASB510'),  # Montana, Ohio
                               ('PVSC507', 'PASC597'),  # Nueve De Julio, Boise
                               ('PZSD106', 'PZSD506'),  # Fushun, Anshan
                               ('PFSD110', 'PFSD210'),  # Kleber, Marceau
-                              ('PWSD110', 'PWSD610')]  # Halland, Smaland
+                              ('PWSD110', 'PWSD610'),  # Halland, Smaland
+                              ('PFSB510', )]  # Bourgogne,
 WG_LOGO = 'https://cdn.discordapp.com/attachments/651324664496521225/651332148963442688/logo.png'
 DEFAULT_GROUPS = ('start', 'peculiar', 'demoWithoutStats', 'earlyAccess', 'special', 'ultimate',
                   'specialUnsellable', 'upgradeableExclusive', 'upgradeable')
 GUESS_GROUPS = ('start', 'peculiar', 'special', 'ultimate',
                 'specialUnsellable', 'upgradeableExclusive', 'upgradeable')
 GUESS_BLOCKED = ('Alabama ST', 'Arkansas Beta', 'Siliwangi', 'Wukong', 'Bajie')
+MAPLESYRUP_COLORS = {'na': [0.4901, 0.7647, 0.9607, 1], 'eu': [0.4901, 0.9607, 0.6235, 1],
+                     'ru': [0.9607, 0.4039, 0.4039, 1], 'asia': [0.9490, 0.5019, 0.6901, 1]}
+MAPLESYRUP_LABELS = {'battles': 'Battles', 'winrate': 'Winrate (%)', 'damage': 'Damage'}
 MATCHMAKING: Dict[Tier, TierBound] = {k: TierBound(*v)
                                       for k, v in _matchmaking.items()}
 THRESHOLDS: List[ArmorThreshold] = [ArmorThreshold(k, name, TierBound(*bound))
@@ -128,10 +132,17 @@ BASE_FP: Dict[Tier, float] = {k: v for k, v in _base_fp.items()}
 hashids = Hashids(min_length=3, alphabet='abcdefghjklmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789')
 logging.getLogger('aiosqlite').setLevel(logging.CRITICAL)
 sns.set(style='dark', font='Trebuchet MS', font_scale=0.9, rc={'axes.facecolor': (0, 0, 0, 0),
-                                          'text.color': 'white',
-                                          'axes.labelcolor': 'white',
-                                          'xtick.color': 'white',
-                                          'ytick.color': 'white'})
+                                                               'axes.labelcolor': 'white',
+                                                               'text.color': 'white',
+                                                               'xtick.color': 'white',
+                                                               'ytick.color': 'white',
+                                                               'xtick.direction': 'in',
+                                                               'ytick.direction': 'in',
+                                                               'xtick.bottom': True,
+                                                               'ytick.left': True,
+                                                               'axes.spines.top': False,
+                                                               'axes.spines.right': False,
+                                                               'figure.figsize': (10.0, 4.5)})
 matplotlib.use('agg')
 
 Regions = collections.namedtuple('Regions', REGION_CODES)
@@ -693,6 +704,24 @@ class WoWS(commands.Cog, name='Wows'):
         print(json.dumps(self.skills, indent=4))
         await ctx.send('Done.')
 
+    @commands.command(hidden=True, brief='Ship details.')
+    async def inspect(self, ctx, *, ship: Ships(one=True)):
+        embed = discord.Embed(title=f'{ship.pretty_name} ({ship.short_name})',
+                              description=f'Tier: {ship.params["level"]}\n'
+                                          f'Nation: {ship.params["typeinfo"]["nation"]}\n'
+                                          f'Class: {ship.params["typeinfo"]["species"]}')
+        embed.set_author(icon_url=WG_LOGO, name=ship.params['name'])
+        embed.set_image(url=f'attachment://ship_bar.png')
+
+        fp = io.BytesIO()
+        image = Image.open(f'assets/private/ship_bars/{ship.params["index"]}_h.png')
+        image.save(fp, 'PNG')
+        fp.seek(0)
+
+        # HULL: health, maxSpeed, rudderTime, turningRadius
+
+        await ctx.send(file=discord.File(fp, filename=f'ship_bar.png'), embed=embed)
+
     @commands.command(hidden=True, brief='Updates maplesyrup data.')
     @commands.is_owner()
     async def update_ms(self, ctx):
@@ -1135,38 +1164,57 @@ class WoWS(commands.Cog, name='Wows'):
         """
         data = {region: {} for region in ship.regions}
         for region, samples in ship.regions.items():
+            leading_zero_flag = False
             for sample in samples:
                 string = str(sample['date'])
                 unix = datetime(year=int(string[0:4]),
                                 month=int(string[4:6]),
                                 day=int(string[6:8])).timestamp()
 
+                observation = None
                 if graph == 'battles':
-                    data[region][unix] = sample['data'][('total battles', 'total battles')]
+                    observation = sample['data'][('total battles', 'total battles')]
                 elif graph == 'winrate':
-                    data[region][unix] = sample['data'][('average of rates', 'win')]
-                else:
-                    data[region][unix] = sample['data'][('average of rates', 'damagecaused')]
+                    observation = sample['data'][('average of rates', 'win')]
+                elif graph == 'damage':
+                    observation = sample['data'][('average of rates', 'damagecaused')] / 1000
+                print(observation)
+
+                if observation is not None and (observation != 0 or leading_zero_flag):
+                    data[region][unix] = observation
+                    leading_zero_flag = True
 
         def generate_image():
             fp = io.BytesIO()
 
             times = list(max(data.values(), key=len).keys())
 
+            if len(times) < 4:
+                raise utils.CustomError('Not enough data for this ship at this time. Try again in the future.')
+
+            if times[-1] - times[0] > 31536000:
+                step = 5256576 * ((times[-1] - times[0]) // 31536000)
+            elif times[-1] - times[0] > 5256000:
+                step = 3285000
+            else:
+                step = 604800
+
             formatted = {'Time': times}
             for region, points in data.items():
-                formatted[region] = [None if time not in times else observation
-                                     for time, observation in points.items()]
-            for value in formatted.values():
-                print(len(value))
+                formatted[region] = [None if time not in points else points[time]
+                                     for time in times]
 
             df = pandas.DataFrame(formatted)
-            g = sns.lineplot(x='Time', y=graph.title(), hue='Regions', palette=sns.color_palette("mako_r", 4),
-                             data=pandas.melt(df, ['Time'], var_name='Regions', value_name=graph.title()))
+            colors = [MAPLESYRUP_COLORS[region] for region in data]
+            g = sns.lineplot(x='Time', y=MAPLESYRUP_LABELS[graph], hue='Regions', palette=colors,
+                             data=pandas.melt(df, ['Time'], var_name='Regions', value_name=MAPLESYRUP_LABELS[graph]))
+            g.xaxis.set_major_locator(matplotlib.ticker.MultipleLocator(step))
             dates = [pandas.to_datetime(tm, unit='s').strftime('%Y-%m-%d') for tm in g.get_xticks()]
-            g.set_xticklabels(dates, rotation=40)
-            g.figure.suptitle(f'{ship.name}: {graph.title()} vs. Time', y=0.95)
-            g.figure.subplots_adjust(bottom=0.25, top=0.875, left=0.150, right=0.975)
+            g.set_xticklabels(dates)
+            if graph.lower() == 'damage':
+                g.set_yticklabels([f'{int(num)}{"k" if int(num) != 0 else ""}' for num in g.get_yticks()])
+            g.figure.suptitle(f'{ship.name}: {graph.title()} vs. Time', x=0.5625, y=0.95)
+            g.figure.subplots_adjust(bottom=0.150, top=0.875, left=0.100, right=0.95)
             g.get_legend().get_frame().set_facecolor((0.1, 0.1, 0.1, 0))
             g.axes.xaxis.labelpad = 11
             g.axes.yaxis.labelpad = 11
