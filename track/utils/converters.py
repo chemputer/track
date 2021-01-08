@@ -4,12 +4,13 @@ import utils
 
 
 class SetValue(commands.Converter):
-    def __init__(self, accepted, case_sensitive=False):
+    def __init__(self, accepted, case_sensitive=False, has_default=False):
         if not case_sensitive:
             self.accepted = accepted
         else:
             self.accepted = [keyword.lower() for keyword in accepted]
         self.case_sensitive = case_sensitive
+        self.has_default = has_default
 
     async def convert(self, ctx, argument):
         if not self.case_sensitive:
@@ -17,8 +18,10 @@ class SetValue(commands.Converter):
 
         if argument not in self.accepted:
             parameter = list(ctx.command.clean_params.keys())[len(ctx.args) - 2]  # -2 removes Cog and Context object
-            raise utils.CustomError(f'Parameter `{parameter}` must be one of the following: {", ".join(self.accepted)} '
-                                    f'({"not " if not self.case_sensitive else ""}case sensitive)')
+            if not self.has_default:
+                raise utils.CustomError(f'Parameter `{parameter}` must be one of the following: {", ".join(self.accepted)} '
+                                        f'({"not " if not self.case_sensitive else ""}case sensitive)')
+
         return argument
 
 

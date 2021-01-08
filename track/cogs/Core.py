@@ -3,6 +3,7 @@ from datetime import datetime
 import traceback
 import sys
 import pickle
+import sqlite3
 
 from discord.ext import commands
 import aiosqlite
@@ -29,35 +30,36 @@ class Core(commands.Cog):
 
     @commands.Cog.listener()
     async def on_ready(self):
-        self.bot.db = await aiosqlite.connect('assets/private/bot.db')
-        self.bot.gameparams = await aiosqlite.connect('assets/private/gameparams.db')
-        self.bot.maplesyrup = await aiosqlite.connect('assets/private/maplesyrup.db')
-        self.bot.rush = await aiosqlite.connect('assets/private/rush.db')
+        if not self.bot.started:
+            self.bot.db = await aiosqlite.connect('assets/private/bot.db')
+            self.bot.gameparams = await aiosqlite.connect('assets/private/gameparams.db')
+            self.bot.maplesyrup = await aiosqlite.connect('assets/private/maplesyrup.db')
+            self.bot.rush = await aiosqlite.connect('assets/private/rush.db')
 
-        self.bot.db.row_factory = dict_factory
-        self.bot.gameparams.row_factory = dict_factory
-        self.bot.maplesyrup.row_factory = dict_factory
-        self.bot.rush.row_factory = aiosqlite.Row
+            self.bot.db.row_factory = dict_factory
+            self.bot.gameparams.row_factory = dict_factory
+            self.bot.maplesyrup.row_factory = dict_factory
+            self.bot.rush.row_factory = aiosqlite.Row
 
-        async with utils.Transaction(self.bot.db) as conn:
-            # Get guild options
-            c = await conn.execute(f'SELECT * FROM guilds')
-            guilds = await c.fetchall()
-            self.bot.guild_options = {guild['id']: guild for guild in guilds}
+            async with utils.Transaction(self.bot.db) as conn:
+                # Get guild options
+                c = await conn.execute(f'SELECT * FROM guilds')
+                guilds = await c.fetchall()
+                self.bot.guild_options = {guild['id']: guild for guild in guilds}
 
-            # Check if bot was invited to new guilds while offline
-            for guild in self.bot.guilds:
-                if guild.id not in self.bot.guild_options:
-                    self.bot.guild_options[guild.id] = DEFAULT_GUILD_SETTINGS.copy()
-                    await conn.execute('INSERT INTO guilds VALUES (?, ?, ?, ?, ?)', (guild.id,) + DEFAULT_GUILD_ROW)
+                # Check if bot was invited to new guilds while offline
+                for guild in self.bot.guilds:
+                    if guild.id not in self.bot.guild_options:
+                        self.bot.guild_options[guild.id] = DEFAULT_GUILD_SETTINGS.copy()
+                        await conn.execute('INSERT INTO guilds VALUES (?, ?, ?, ?, ?)', (guild.id,) + DEFAULT_GUILD_ROW)
 
-            # Get latest row of stats
-            c = await conn.execute('SELECT stats FROM stats ORDER BY stats DESC LIMIT 1')
-            stats = await c.fetchone()
-            if not self.bot.started:
+                # Get latest row of stats
+                c = await conn.execute('SELECT stats FROM stats ORDER BY stats DESC LIMIT 1')
+                stats = await c.fetchone()
                 self.bot.stats = stats if stats is not None else Counter()
 
-        self.bot.started = True
+            self.bot.started = True
+
         print(f'Ready!          [{datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")}]\n'
               f'Name: {self.bot.user} | ID: {self.bot.user.id}')
 
@@ -71,9 +73,12 @@ class Core(commands.Cog):
 
     @commands.Cog.listener()
     async def on_guild_join(self, guild):
-        self.bot.guild_options[guild.id] = DEFAULT_GUILD_SETTINGS.copy()
-        async with utils.Transaction(self.bot.db) as conn:
-            await conn.execute('INSERT INTO guilds VALUES (?, ?, ?, ?, ?)', (guild.id,) + DEFAULT_GUILD_ROW)
+        try:
+            self.bot.guild_options[guild.id] = DEFAULT_GUILD_SETTINGS.copy()
+            async with utils.Transaction(self.bot.db) as conn:
+                await conn.execute('INSERT INTO guilds VALUES (?, ?, ?, ?, ?)', (guild.id,) + DEFAULT_GUILD_ROW)
+        except sqlite3.IntegrityError:
+            pass  # rejoining a guild
 
     @commands.Cog.listener()
     async def on_command_error(self, ctx, error):

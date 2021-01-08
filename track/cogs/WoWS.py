@@ -1,15 +1,19 @@
 from discord.ext import commands, menus
 import discord
 import wargaming
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 from hashids import Hashids
 from unidecode import unidecode
 import polib
+import requests
 import aiohttp
 from bs4 import BeautifulSoup
 import pandas
 import seaborn as sns
 import matplotlib
+from lxml import etree
+import imageio
+import numpy
 
 import collections
 import json
@@ -17,15 +21,18 @@ import io
 from concurrent.futures import ThreadPoolExecutor
 import re
 import pickle
-from typing import Dict, Tuple, NamedTuple, List
+from typing import Dict, Tuple, NamedTuple, List, Optional
 from datetime import datetime
 import asyncio
 import sqlite3
 import logging
 import random
+import math
+import os
 
 import config
 import utils
+from replay_unpack.clients.wows import ReplayPlayer
 
 
 Tier = int
@@ -84,7 +91,7 @@ _base_fp = {3: 0.9667, 4: 0.9001, 5: 0.8335, 6: 0.7669, 7: 0.7003, 8: 0.6337, 9:
 
 
 REGION_CODES = ['na', 'eu', 'ru', 'asia']
-VERSION = '0.9.4.1'
+VERSION = '0.9.5.1'
 MAPLESYRUP_URL = 'http://maplesyrup.sweet.coocan.jp/wows/shipstatswk/'
 SKILL_NICKNAMES = {'1': ['bft'], '2': ['bos'], '3': ['em'], '4': ['tae'],
                    '5': ['ha'], '7': ['vig', 'vigi'], '8': ['de'], '9': ['aft'],
@@ -98,7 +105,7 @@ SIMILAR_SHIPS: List[Tuple] = [('PASB017', 'PASB510'),  # Montana, Ohio
                               ('PBSB510', 'PBSB110'),  # Thunderer, Conqueror
                               ('PASD021', 'PASD709'),  # Fletcher, Black
                               ('PGSC508', 'PGSC108', 'PGSC518'),  # Prinz Eugen, Hipper, Mainz
-                              ('PASC020', 'PASC710'),  # Salem
+                              ('PASC020', 'PASC710'),  # Des Moines, Salem
                               ('PJSB509', 'PJSB018', 'PJSB510'),  # Musashi, Yamato, Shikishima
                               ('PASB518', 'PASB508'),  # Massachusetts, Alabama
                               ('PBSB107', 'PBSB527'),  # King George V, Duke Of York
@@ -108,10 +115,13 @@ SIMILAR_SHIPS: List[Tuple] = [('PASB017', 'PASB510'),  # Montana, Ohio
                               ('PASB018', 'PASB509'),  # Iowa, Missouri
                               ('PFSD108', 'PFSD508'),  # Le Fantasque, Le Terrible
                               ('PVSC507', 'PASC597'),  # Nueve De Julio, Boise
-                              ('PZSD106', 'PZSD506'),  # Fushun, Anshan
+                              ('PZSD106', 'PZSD506', 'PRSD206'),  # Fushun, Anshan, Gnevny
                               ('PFSD110', 'PFSD210'),  # Kleber, Marceau
                               ('PWSD110', 'PWSD610'),  # Halland, Smaland
-                              ('PFSB510', )]  # Bourgogne,
+                              ('PASD008', 'PZSD108'),  # Benson, Hsienyang
+                              ('PBSC508', 'PBSC208'),  # Cheshire, Albemarle
+                              ('PFSB109', 'PFSB510'),  # Alsace, Bourgogne
+                              ('PRSD207', 'PRSD507')]  # Minsk, Leningrad
 WG_LOGO = 'https://cdn.discordapp.com/attachments/651324664496521225/651332148963442688/logo.png'
 DEFAULT_GROUPS = ('start', 'peculiar', 'demoWithoutStats', 'earlyAccess', 'special', 'ultimate',
                   'specialUnsellable', 'upgradeableExclusive', 'upgradeable')
@@ -121,12 +131,23 @@ GUESS_BLOCKED = ('Alabama ST', 'Arkansas Beta', 'Siliwangi', 'Wukong', 'Bajie')
 MAPLESYRUP_COLORS = {'na': [0.4901, 0.7647, 0.9607, 1], 'eu': [0.4901, 0.9607, 0.6235, 1],
                      'ru': [0.9607, 0.4039, 0.4039, 1], 'asia': [0.9490, 0.5019, 0.6901, 1]}
 MAPLESYRUP_LABELS = {'battles': 'Battles', 'winrate': 'Winrate (%)', 'damage': 'Damage'}
+TL_GRIDS = 10
+TL_SAMPLE_RATE = 0.5
+TL_COLORS = {'ally': (70, 224, 163), 'enemy': (248, 64, 0),
+             'teamkiller': (252, 130, 180), 'division': (252, 202, 101)}
+TL_CAP_COLORS = {'neutral': ((255, 255, 255, 170), (255, 255, 255, 30)),
+                 'ally': ((70, 224, 163, 170), (70, 224, 163, 30)),
+                 'enemy': ((248, 64, 0, 170), (248, 64, 0, 30))}
+WG_FONT_BOLD = ImageFont.truetype('assets/public/Warhelios Bold.ttf')
+WG_FONT_BOLD_LARGE = ImageFont.truetype('assets/public/Warhelios Bold.ttf', size=14)
 MATCHMAKING: Dict[Tier, TierBound] = {k: TierBound(*v)
                                       for k, v in _matchmaking.items()}
 THRESHOLDS: List[ArmorThreshold] = [ArmorThreshold(k, name, TierBound(*bound))
                                     for k, v in _thresholds.items()
                                     for name, bound in v.items()]
 BASE_FP: Dict[Tier, float] = {k: v for k, v in _base_fp.items()}
+GAMEMODES_ACCEPTED = ['randoms', 'pvp', 'coop', 'co-op', 'pve', 'rank', 'ranked']
+GAMEMODES_ALIASES = {'randoms': 'pvp', 'coop': 'pve', 'co-op': 'pve', 'ranked': 'rank',}
 
 # excluded i, I, 1, O, 0 from Base62 to prevent confusion
 hashids = Hashids(min_length=3, alphabet='abcdefghjklmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789')
@@ -143,6 +164,7 @@ sns.set(style='dark', font='Trebuchet MS', font_scale=0.9, rc={'axes.facecolor':
                                                                'axes.spines.top': False,
                                                                'axes.spines.right': False,
                                                                'figure.figsize': (10.0, 4.5)})
+# matplotlib.font_manager._rebuild()
 matplotlib.use('agg')
 
 Regions = collections.namedtuple('Regions', REGION_CODES)
@@ -179,6 +201,7 @@ class Builds(commands.Converter):
                                   color=ctx.bot.color)
             pages = menus.MenuPages(source=BuildsPages(embed, builds), clear_reactions_after=True)
             await pages.start(ctx)
+            raise utils.SilentError()
         else:
             return builds[0] if self.one else builds
 
@@ -208,6 +231,7 @@ class Ships(commands.Converter):
         self.ignored_chars = ignored_chars
 
     def clean(self, string):
+        string = unidecode(string)
         for char in self.ignored_chars:
             string = string.replace(char, '')
         return string.lower()
@@ -225,9 +249,9 @@ class Ships(commands.Converter):
             except KeyError:
                 continue
 
-            cleaned = self.clean(unidecode(argument))
-            cleaned_pretty = self.clean(unidecode(pretty_name))
-            cleaned_short = self.clean(unidecode(short_name))
+            cleaned = self.clean(argument)
+            cleaned_pretty = self.clean(pretty_name)
+            cleaned_short = self.clean(short_name)
 
             if cleaned == cleaned_pretty or cleaned == cleaned_short:
                 if ship['group'] in self.groups:
@@ -631,6 +655,164 @@ class GuessMenu(menus.Menu):
         self.stop()
 
 
+class ShipStatsMenu(menus.Menu):
+    def __init__(self, gamemode, region, player, ship, message_id):
+        super().__init__(clear_reactions_after=True)
+        self.gamemode = gamemode
+        self.region = region
+        self.player = player
+        self.ship = ship
+        self.message_id = message_id
+        self.last_page = None
+
+    async def send_initial_message(self, ctx, channel):
+        embed = self.generate_embed(self.gamemode)
+        self.last_page = embed
+        return await ctx.send(embed=embed)
+
+    def format_int(self, num):
+        return format(int(num), ',d').replace(',', ' ')
+
+    def format_float(self, num, percent=False):
+        if num is not None:
+            if percent:
+                return '{:.2f}'.format(num) + '%'
+            else:
+                return '{:.2f}'.format(num)
+        else:
+            return '-'
+
+    def special_divide(self, numerator, denominator):
+        try:
+            return numerator / denominator
+        except ZeroDivisionError:
+            return None
+
+    def get_pr_color(self, pr):
+        if pr > 2450:
+            return 0xA00DC5
+        elif pr > 2100:
+            return 0xD042F3
+        elif pr > 1750:
+            return 0x02C9B3
+        elif pr > 1550:
+            return 0x318000
+        elif pr > 1350:
+            return 0x44B300
+        elif pr > 1100:
+            return 0xFFC71F
+        elif pr > 750:
+            return 0xFE7903
+        else:
+            return 0xFE0E00
+
+    def generate_embed(self, group):
+        battles = self.ship[group]["battles"]
+
+        embed = discord.Embed(title=f'{self.player["nickname"]}\'s {self.bot.encyclopedia_ships[str(self.ship["ship_id"])]["name"]}',
+                              description=f'Battles: `{battles}` '
+                                          f'(Last: `{datetime.utcfromtimestamp(self.ship["last_battle_time"]).strftime("%Y-%m-%d %H:%M:%S GMT")}`)\n'
+                                          f'WR: `{self.format_float(self.special_divide(100 * self.ship[group]["wins"], battles), percent=True)}` '
+                                          f'(`{self.ship[group]["wins"]}`/`{self.ship[group]["losses"]}`/`{self.ship[group]["draws"]}`)\n'
+                                          f'SR: `{self.format_float(self.special_divide(100 * self.ship[group]["survived_battles"], battles), percent=True)}` '
+                                          f'(`{self.ship[group]["survived_battles"]}`/`{battles - self.ship[group]["survived_battles"]}`)\n'
+                                          f'PR: `{int(self.ship[group]["pr"])}`',
+                              color=self.get_pr_color(self.ship[group]['pr']),
+                              timestamp=discord.utils.snowflake_time(self.message_id))
+        embed.set_author(name=f'Random Battles ({self.region.upper()})',
+                         url=f'https://{self.region}.wows-numbers.com/player/{self.player["account_id"]},{self.player["nickname"]}/',
+                         icon_url='https://media.discordapp.net/attachments/651324664496521225/766209521651286046/595.png')
+        embed.set_footer(text='Requested')
+        embed.add_field(name='Averages',
+                        value=f'<:damage:766222493370286120> Damage: `{self.format_int(self.special_divide(self.ship[group]["damage_dealt"], battles))}`\n'
+                              f'<:kills:766222375284506635> Kills: `{self.format_float(self.special_divide(self.ship[group]["frags"], battles))}`\n'
+                              f'<:aircraft:766222537759129610> Aircraft: `{self.format_float(self.special_divide(self.ship[group]["planes_killed"], battles))}`\n'
+                              f'<:spotting:766759035088535593> Spotting: `{self.format_int(self.special_divide(self.ship[group]["damage_scouting"], battles))}`\n'
+                              f'<:potential:766759088574169128> Potential: `{self.format_int(self.special_divide(self.ship[group]["art_agro"] + self.ship[group]["torpedo_agro"], battles))}`')
+        embed.add_field(name='Records',
+                        value=f'<:damage:766222493370286120> Damage: `{self.format_int(self.ship[group]["max_damage_dealt"])}`\n'
+                              f'<:kills:766222375284506635> Kills: `{self.ship[group]["max_frags_battle"]}`\n'
+                              f'<:aircraft:766222537759129610> Aircraft: `{self.ship[group]["max_planes_killed"]}`\n'
+                              f'<:spotting:766759035088535593> Spotting: `{self.format_int(self.ship[group]["max_damage_scouting"])}`\n'
+                              f'<:potential:766759088574169128> Potential: `{self.format_int(self.ship[group]["max_total_agro"])}`')
+        embed.add_field(name='Weapon Statistics (Kills/Max/Hitrate)',
+                        value=f'Main Battery: (`{self.ship[group]["main_battery"]["frags"]}`/`{self.ship[group]["main_battery"]["max_frags_battle"]}`/`{self.format_float(self.special_divide(100 * self.ship[group]["main_battery"]["hits"], self.ship[group]["main_battery"]["shots"]), percent = True)}`)\n'
+                              f'Secondaries: (`{self.ship[group]["second_battery"]["frags"]}`/`{self.ship[group]["second_battery"]["max_frags_battle"]}`/`{self.format_float(self.special_divide(100 * self.ship[group]["second_battery"]["hits"], self.ship[group]["second_battery"]["shots"]), percent = True)}`)\n'
+                              f'Torpedoes: (`{self.ship[group]["torpedoes"]["frags"]}`/`{self.ship[group]["torpedoes"]["max_frags_battle"]}`/`{self.format_float(self.special_divide(100 * self.ship[group]["torpedoes"]["hits"], self.ship[group]["torpedoes"]["shots"]), percent = True)}`)\n'
+                              f'Aircraft: (`{self.ship[group]["aircraft"]["frags"]}`/`{self.ship[group]["aircraft"]["max_frags_battle"]}`/`-`)\n'
+                              f'Ramming: (`{self.ship[group]["ramming"]["frags"]}`/`{self.ship[group]["ramming"]["max_frags_battle"]}`/`-`)',
+                        inline=False)
+
+        return embed
+
+    @menus.button('⏹️', position=menus.Last(1))
+    async def end(self, payload):
+        """
+        Stops the interactive session.
+        """
+        self.stop()
+
+    @menus.button('❓', position=menus.Last(0))
+    async def info(self, payload):
+        """
+        Toggle the help page.
+        """
+        if self.last_page is not None:
+            await self.message.edit(embed=self.last_page)
+            self.last_page = None
+        else:
+            self.last_page = self.message.embeds[0]
+
+            embed = discord.Embed(title='stats - Help',
+                                  description='This command shows you detailed stats of a player\'s ship. '
+                                              'PR ([formula](https://wows-numbers.com/personal/rating)) is an aggregate score borrowed from wows-numbers.com. '
+                                              'Expected values are synced up with wows-numbers approximately every hour.\n\n'
+                                              'Use the reactions below to change the group (All, Solo, Duo, Trio).',
+                                  color=self.bot.color)
+            for emoji, button in self.buttons.items():
+                embed.add_field(name=emoji,
+                                value=button.action.__doc__,
+                                inline=False)
+            await self.message.edit(embed=embed)
+
+    @menus.button('🇦')
+    async def main(self, payload):
+        """
+        The main page. Aggregates the solo, duo, and trio stats.
+        """
+        self.last_page = None
+
+        await self.message.edit(embed=self.generate_embed(self.gamemode))
+
+    @menus.button('1️⃣')
+    async def solo(self, payload):
+        """
+        Solo stats only.
+        """
+        self.last_page = None
+
+        await self.message.edit(embed=self.generate_embed(self.gamemode + '_solo'))
+
+    @menus.button('2️⃣')
+    async def div2(self, payload):
+        """
+        Duo stats only.
+        """
+        self.last_page = None
+
+        await self.message.edit(embed=self.generate_embed(self.gamemode + '_div2'))
+
+    @menus.button('3️⃣')
+    async def div3(self, payload):
+        """
+        Trio stats only.
+        """
+        self.last_page = None
+
+        await self.message.edit(embed=self.generate_embed(self.gamemode + '_div3'))
+
+
+
 class WoWS(commands.Cog, name='Wows'):
     """
     World of Warships commands.
@@ -646,10 +828,22 @@ class WoWS(commands.Cog, name='Wows'):
                            ru=wargaming.WoWS(config.wg_token, region='ru', language='en'),
                            asia=wargaming.WoWS(config.wg_token, region='asia', language='en'))
 
-        self.skills = self.api.na.encyclopedia.crewskills().data
         self.bot.globalmo = {entry.msgid: entry.msgstr for entry in polib.mofile('assets/private/global.mo')}
+        self.skills = self.api.na.encyclopedia.crewskills().data
+        self.bot.encyclopedia_ships = {}
+        page = 1
+        while True:
+            try:
+                self.bot.encyclopedia_ships = {**self.bot.encyclopedia_ships, **self.api.na.encyclopedia.ships(page_no=page).data}
+                page += 1
+            except wargaming.exceptions.RequestError:
+                break
+        # with open('encyclopedia_ships.json', 'w') as fp:
+        #     json.dump(self.encyclopedia_ships, fp, indent=4)
 
-        self.bot.ships = []
+        self.wowsnumbers = requests.get('https://api.wows-numbers.com/personal/rating/expected/json/').json()['data']
+
+        self.bot.ships, self.bot.aircraft = [], []
         with sqlite3.connect('assets/private/gameparams.db') as conn:
             c = conn.execute('SELECT * FROM Ship')
 
@@ -657,9 +851,19 @@ class WoWS(commands.Cog, name='Wows'):
                 params = pickle.loads(params_blob)
                 self.bot.ships.append({'name': params['name'],
                                        'index': params['index'],
+                                       'id': params['id'],
                                        'level': params['level'],
                                        'group': params['group'],
                                        'typeinfo': params['typeinfo']})
+
+            c = conn.execute('SELECT * FROM Aircraft')
+
+            for plane, params_blob in c.fetchall():
+                params = pickle.loads(params_blob)
+                self.bot.aircraft.append({'name': params['name'],
+                                          'index': params['index'],
+                                          'id': params['id'],
+                                          'typeinfo': params['typeinfo']})
 
         self.bot.ms_ships = {}
         with sqlite3.connect('assets/private/maplesyrup.db') as conn:
@@ -694,23 +898,13 @@ class WoWS(commands.Cog, name='Wows'):
         except KeyError:
             await ctx.send('No localization entry for this index.')
 
-    @commands.command(hidden=True, brief='Loads skill data from WGAPI.')
-    @commands.is_owner()
-    async def api_skills(self, ctx):
-        """
-        Loads skill data from WGAPI.
-        """
-        self.skills = self.api.na.encyclopedia.crewskills().data
-        print(json.dumps(self.skills, indent=4))
-        await ctx.send('Done.')
-
     @commands.command(hidden=True, brief='Ship details.')
     async def inspect(self, ctx, *, ship: Ships(one=True)):
         embed = discord.Embed(title=f'{ship.pretty_name} ({ship.short_name})',
                               description=f'Tier: {ship.params["level"]}\n'
                                           f'Nation: {ship.params["typeinfo"]["nation"]}\n'
                                           f'Class: {ship.params["typeinfo"]["species"]}')
-        embed.set_author(icon_url=WG_LOGO, name=ship.params['name'])
+        embed.set_author(icon_url=WG_LOGO, name=f'{ship.params["name"]} ({ship.params["index"]})')
         embed.set_image(url=f'attachment://ship_bar.png')
 
         fp = io.BytesIO()
@@ -721,6 +915,16 @@ class WoWS(commands.Cog, name='Wows'):
         # HULL: health, maxSpeed, rudderTime, turningRadius
 
         await ctx.send(file=discord.File(fp, filename=f'ship_bar.png'), embed=embed)
+
+    @commands.command(hidden=True, brief='Loads skill data from WGAPI.')
+    @commands.is_owner()
+    async def api_skills(self, ctx):
+        """
+        Loads skill data from WGAPI.
+        """
+        self.skills = self.api.na.encyclopedia.crewskills().data
+        print(json.dumps(self.skills, indent=4))
+        await ctx.send('Done.')
 
     @commands.command(hidden=True, brief='Updates maplesyrup data.')
     @commands.is_owner()
@@ -750,7 +954,7 @@ class WoWS(commands.Cog, name='Wows'):
                     if not links:
                         return await ctx.send('No new data to process.')
 
-                    await utils.confirm(ctx, f'`{len(links)}` to process. Continue?')
+                    await ctx.send(f'Processing `{len(links)}` new links.')
 
                     for count, link in enumerate(links, start=1):
                         print(f'Processing link {count} of {len(links)}.')
@@ -826,7 +1030,7 @@ class WoWS(commands.Cog, name='Wows'):
         await ctx.send(file=discord.File(image, filename='build.png'), embed=self.build_embed(build))
 
     @builds.command(aliases=['add'], brief='Create a new build.')
-    @commands.cooldown(rate=1, per=10, type=commands.BucketType.user)
+    @commands.cooldown(rate=1, per=20, type=commands.BucketType.user)
     @commands.guild_only()
     async def create(self, ctx, title: utils.Max(75), captain_skills: utils.lowercase, description='No description given.'):
         """
@@ -961,7 +1165,7 @@ class WoWS(commands.Cog, name='Wows'):
         await ctx.send('https://worldofwarships.com/en/content/captains-skills/')
 
     @commands.command(aliases=['ifhe'], brief='Detailed info about a ship\'s HE.')
-    @commands.cooldown(rate=1, per=10, type=commands.BucketType.user)
+    @commands.cooldown(rate=1, per=4, type=commands.BucketType.user)
     async def he(self, ctx, *, ship: Ships(one=True), signals=False, de=False, bft=False, page=1):
         """
         Calculates a ship's HE characteristics, including fire chance and penetration.
@@ -1013,7 +1217,7 @@ class WoWS(commands.Cog, name='Wows'):
         await HEMenu(ship, main_batteries, secondaries, page, signals, de, bft).start(ctx)
 
     @commands.command(brief='Detailed info about a ship\'s AP.')
-    @commands.cooldown(rate=1, per=10, type=commands.BucketType.user)
+    @commands.cooldown(rate=1, per=4, type=commands.BucketType.user)
     async def ap(self, ctx, *, ship: Ships(one=True), page=1):
         """
         Calculates a ship's AP characteristics.
@@ -1064,7 +1268,7 @@ class WoWS(commands.Cog, name='Wows'):
         await ctx.send(embed=embed)
 
     @commands.command(aliases=['contours'], brief='Who\'s that ~~pokemon~~ ship?')
-    @commands.cooldown(rate=1, per=5, type=commands.BucketType.user)
+    @commands.cooldown(rate=1, per=3, type=commands.BucketType.user)
     async def guess(self, ctx, tiers: commands.Greedy[int] = (6, 7, 8, 9, 10)):
         """
         A guessing minigame inspired by "Who's that pokemon?".
@@ -1115,10 +1319,11 @@ class WoWS(commands.Cog, name='Wows'):
         fp.seek(0)
 
         def check(m):
-            return unidecode(m.content.lower().replace('-', '').replace('.', '').replace(' ', '')) in cleaned
+            return (unidecode(m.content.lower().replace('-', '').replace('.', '').replace(' ', '')) in cleaned and
+                    m.channel.id == menu.message.channel.id)
 
         message = None
-        menu = GuessMenu(discord.File(fp, filename=f'guess.png'), tiers, accepted)
+        menu = GuessMenu(discord.File(fp, filename='guess.png'), tiers, accepted)
         await menu.start(ctx)
         start = datetime.now()
         try:
@@ -1139,7 +1344,7 @@ class WoWS(commands.Cog, name='Wows'):
                         return await ctx.send(f'Time\'s up. Accepted Answers:\n- ' + '\n- '.join(accepted))
                     return
 
-        if message is not None:
+        if message is not None and menu.running:
             menu.stop()
             time = (datetime.now() - start).total_seconds()
             data = await utils.fetch_user(self.bot.db, message.author.id)
@@ -1154,11 +1359,12 @@ class WoWS(commands.Cog, name='Wows'):
             async with utils.Transaction(self.bot.db) as conn:
                 await conn.execute('UPDATE users SET data = ? WHERE id = ?', (pickle.dumps(data), message.author.id))
 
-    @commands.command(aliases=['maplesyrup'], brief='View ships\'s historical data.')
+    @commands.command(aliases=['maplesyrup'], brief='View a ships\'s historical data.')
     async def histdata(self, ctx, graph: utils.SetValue(['battles', 'winrate', 'damage']), *, ship: MSConverter):
         """
         View the historical performance for specified ships over time.
 
+        Available graphs: Battles vs. Time, Winrate vs. Time, Damage vs. Time
         Uses data from [Suihei Koubou](http://maplesyrup.sweet.coocan.jp/wows/).
         Uses unit-based data; i.e. the normal dataset.
         """
@@ -1178,13 +1384,12 @@ class WoWS(commands.Cog, name='Wows'):
                     observation = sample['data'][('average of rates', 'win')]
                 elif graph == 'damage':
                     observation = sample['data'][('average of rates', 'damagecaused')] / 1000
-                print(observation)
 
                 if observation is not None and (observation != 0 or leading_zero_flag):
                     data[region][unix] = observation
                     leading_zero_flag = True
 
-        def generate_image():
+        def generate_graph():
             fp = io.BytesIO()
 
             times = list(max(data.values(), key=len).keys())
@@ -1192,12 +1397,15 @@ class WoWS(commands.Cog, name='Wows'):
             if len(times) < 4:
                 raise utils.CustomError('Not enough data for this ship at this time. Try again in the future.')
 
-            if times[-1] - times[0] > 31536000:
-                step = 5256576 * ((times[-1] - times[0]) // 31536000)
-            elif times[-1] - times[0] > 5256000:
-                step = 3285000
+            bounds = times[-1] - times[0]
+            if bounds > 31536000:  # year
+                step = 5256576 * ((bounds + 10512000) // 31536000)  # multiple of 2 mo
+            elif bounds > 21024000:  # 8 mo
+                step = 3942000  # 1.5 mo
+            elif bounds > 5256000:  # 2 mo
+                step = 2628000  # 1 mo
             else:
-                step = 604800
+                step = 604800  # 1 week
 
             formatted = {'Time': times}
             for region, points in data.items():
@@ -1213,7 +1421,7 @@ class WoWS(commands.Cog, name='Wows'):
             g.set_xticklabels(dates)
             if graph.lower() == 'damage':
                 g.set_yticklabels([f'{int(num)}{"k" if int(num) != 0 else ""}' for num in g.get_yticks()])
-            g.figure.suptitle(f'{ship.name}: {graph.title()} vs. Time', x=0.5625, y=0.95)
+            g.figure.suptitle(f'{ship.name}: {graph.title()} vs. Time', x=0.525, y=0.95)
             g.figure.subplots_adjust(bottom=0.150, top=0.875, left=0.100, right=0.95)
             g.get_legend().get_frame().set_facecolor((0.1, 0.1, 0.1, 0))
             g.axes.xaxis.labelpad = 11
@@ -1222,10 +1430,359 @@ class WoWS(commands.Cog, name='Wows'):
             g.figure.savefig(fp, facecolor=(0, 0, 0, 0), edgecolor='none')
             g.figure.clf()
             fp.seek(0)
+
             return fp
 
-        image = await self.bot.loop.run_in_executor(ThreadPoolExecutor(), generate_image)
-        await ctx.send(file=discord.File(image, 'graph.png'))
+        def generate_final(fp):
+            new_fp = io.BytesIO()
+
+            post = Image.open(fp)
+            track_logo = Image.open('assets/public/track.png')
+            track_logo = track_logo.resize((90, 20))
+            post.paste(track_logo, (900, 420), track_logo)
+            post.save(new_fp, 'PNG')
+            new_fp.seek(0)
+
+            return new_fp
+
+        graph_image = await self.bot.loop.run_in_executor(ThreadPoolExecutor(), generate_graph)
+        final_image = await self.bot.loop.run_in_executor(ThreadPoolExecutor(), generate_final, graph_image)
+        await ctx.send(file=discord.File(final_image, 'graph.png'))
+
+    @staticmethod
+    def get_map_dimensions(map_name):
+        with open(f'assets/private/{map_name}/space.settings', 'rb') as f:
+            tree = etree.parse(f)
+
+        space_bounds, = tree.xpath('/space.settings/bounds')
+        if space_bounds.attrib:
+            min_x = int(space_bounds.get('minX'))
+            min_y = int(space_bounds.get('minY'))
+            max_x = int(space_bounds.get('maxX'))
+            max_y = int(space_bounds.get('maxY'))
+        else:
+            min_x = int(space_bounds.xpath('minX/text()')[0])
+            min_y = int(space_bounds.xpath('minY/text()')[0])
+            max_x = int(space_bounds.xpath('maxX/text()')[0])
+            max_y = int(space_bounds.xpath('maxY/text()')[0])
+
+        chunk_size_elements = tree.xpath('/space.settings/chunkSize')
+        if chunk_size_elements:
+            chunk_size = float(chunk_size_elements[0].text)
+        else:
+            chunk_size = 100.0
+
+        return (len(range(min_x, max_x + 1)) * chunk_size - 4 * chunk_size,
+                len(range(min_y, max_y + 1)) * chunk_size - 4 * chunk_size)
+
+    @staticmethod
+    def create_minimap(map_index):
+        water = Image.open(f'assets/private/{map_index}/minimap_water.png')
+        land = Image.open(f'assets/private/{map_index}/minimap.png')
+        water.paste(land, (0, 0), land)
+
+        overlay = Image.new('RGBA', (water.width, water.height), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(overlay)
+        for num in range(1, TL_GRIDS):
+            draw.line(((num * water.width // TL_GRIDS), 0,
+                       (num * water.width // TL_GRIDS), water.height),
+                      fill=(170, 170, 170, 30))
+            draw.line((0, (num * water.height // TL_GRIDS),
+                       water.width, (num * water.height // TL_GRIDS)),
+                      fill=(170, 170, 170, 30))
+        del draw
+
+        return Image.alpha_composite(water, overlay)
+
+    @staticmethod
+    def draw_caps(width, height, team, base, caps):
+        overlay = Image.new('RGBA', (base.width, base.height), (0, 0, 0, 0))
+        overlay_draw = ImageDraw.Draw(overlay)
+
+        for count, cap in enumerate(caps, start=65):
+            x = cap['position'][0] * base.width / width + base.width / 2
+            y = -cap['position'][1] * base.height / height + base.height / 2
+            r = cap['radius'] * base.height / height
+
+            colors = (TL_CAP_COLORS['neutral'] if cap['teamId'] == -1 else
+                      TL_CAP_COLORS['ally'] if cap['teamId'] == team else
+                      TL_CAP_COLORS['enemy'])
+            overlay_draw.ellipse((x - r, y - r, x + r, y + r), outline=colors[0], fill=colors[1], width=2)
+
+            if cap['teamId'] == -1 or cap['hasInvaders']:
+                rings = (((x - 12, y), (x, y - 12), (x + 12, y), (x, y + 12)),
+                         ((x - 11, y), (x, y - 11), (x + 11, y), (x, y + 11)),
+                         ((x - 10, y), (x, y - 10), (x + 10, y), (x, y + 10)))
+            else:
+                rings = (((x - 9, y - 9), (x + 9, y - 9), (x + 9, y + 9), (x - 9, y + 9)),
+                         ((x - 8, y - 8), (x + 8, y - 8), (x + 8, y + 8), (x - 8, y + 8)))
+
+            for ring in rings:
+                overlay_draw.polygon(ring, outline=colors[0], fill=colors[1])
+
+            overlay_draw.text((x - 3, y - 10), text=chr(count), fill=colors[0],
+                              font=WG_FONT_BOLD_LARGE, align='center')
+
+        del overlay_draw
+        return Image.alpha_composite(base, overlay)
+
+    @commands.command(hidden=True)
+    @commands.cooldown(rate=1, per=5, type=commands.BucketType.user)
+    async def pz(self, ctx):
+        """
+        extract winner & timestamp
+        """
+        if not ctx.message.attachments:
+            return await ctx.send('No attachment found to use.')
+        elif len(ctx.message.attachments) > 1:
+            return await ctx.send('Please attach only one file.')
+        elif not ctx.message.attachments[0].filename.endswith('.wowsreplay'):
+            return await ctx.send('Are you sure this is a WoWS replay file?')
+
+        async with ctx.typing():
+            fp = io.BytesIO()
+            await ctx.message.attachments[0].save(fp)
+            reader = utils.ReplayReader(fp)
+            data = await self.bot.loop.run_in_executor(ThreadPoolExecutor(), reader.get_data)
+            version = data.engine_data['clientVersionFromExe']
+            await ctx.send('Parse successful.')
+
+        async with ctx.typing():
+            try:
+                replay_player = ReplayPlayer(version[:version.rfind(',')].replace(',', '_'))
+            except RuntimeError as e:
+                return await ctx.send('Version not supported :(.')
+            await self.bot.loop.run_in_executor(ThreadPoolExecutor(), replay_player.play, data.decrypted_data)
+            info = replay_player.get_info()
+            await ctx.send('Encrypted data processed.')
+
+        await ctx.send(f'Battle result: `{info["battle_result"]}`')
+        await ctx.send(f'Owner team ID: `{info["owner_team_id"]}`')
+
+    @commands.command(aliases=['tl'], brief='Generates timelapse video from replay.')
+    @commands.cooldown(rate=1, per=20, type=commands.BucketType.user)
+    async def timelapse(self, ctx):
+        """
+        Generates a timelapse of the minimap from a provided .wowsreplay file.
+
+        This is a volatile command, and its usage is limited.
+        """
+        if not ctx.message.attachments:
+            return await ctx.send('No attachment found to use.')
+        elif len(ctx.message.attachments) > 1:
+            return await ctx.send('Please attach only one file.')
+        elif not ctx.message.attachments[0].filename.endswith('.wowsreplay'):
+            return await ctx.send('Are you sure this is a WoWS replay file?')
+
+        async with ctx.typing():
+            fp = io.BytesIO()
+            await ctx.message.attachments[0].save(fp)
+            reader = utils.ReplayReader(fp)
+            data = await self.bot.loop.run_in_executor(ThreadPoolExecutor(), reader.get_data)
+            version = data.engine_data['clientVersionFromExe']
+            await ctx.send('Replay parsed.')
+
+        async with ctx.typing():
+            try:
+                replay_player = ReplayPlayer(version[:version.rfind(',')].replace(',', '_'))
+            except RuntimeError as e:
+                return await ctx.send(f'{e}. PM owner if bot is outdated.')
+            await self.bot.loop.run_in_executor(ThreadPoolExecutor(), replay_player.play, data.decrypted_data)
+            info = replay_player.get_info()
+            await ctx.send('Encrypted data processed. Building video...')
+
+        map_name = data.engine_data['mapName']
+        minimap = await self.bot.loop.run_in_executor(ThreadPoolExecutor(), self.create_minimap, map_name)
+        width, height = self.get_map_dimensions(map_name)
+
+        # plane_types = []
+        # for details in info['planes'].values():
+        #     plane_types.append(next(plane['name'] for plane in self.bot.aircraft if details['gameparams_id'] == plane['id']))
+        # print(plane_types)
+        #
+        # types = set()
+        # for aircraft in self.bot.aircraft:
+        #     types.add(aircraft['typeinfo']['species'])
+        # print(types)
+
+        def draw_priority(player_state):
+            player_info = next(player_info for player_info in info['playerInfo']
+                               if player_info.avatarId == player_state.avatarId)
+            return (0 if not player_state.isAlive else
+                    1 if not player_state.isVisible else
+                    4 if player_info.isOwner else
+                    2 + player_info.isAlly)
+
+        def create_frame(time, states):
+            base = minimap.copy()
+            base = self.draw_caps(width, height, info['owner_team_id'], base, info['caps_history'][time])
+            base_draw = ImageDraw.Draw(base)
+            states.sort(key=draw_priority)
+
+            for state in states:
+                if state.isVisible is not None:
+                    player_info = next(player_info for player_info in info['playerInfo']
+                                       if player_info.avatarId == state.avatarId)
+                    ship_details = next(ship for ship in self.bot.ships if ship['id'] == player_info.shipParamsId)
+                    ship_class = ship_details['typeinfo']['species'].lower()
+                    short_name = ctx.bot.globalmo[f'IDS_{ship_details["index"]}']
+                    relation = ('self' if player_info.isOwner else 'ally' if player_info.isAlly else 'enemy')
+                    angle = 2 * math.degrees(-state.yaw) + (90 if relation == 'enemy' else -90)
+
+                    if not state.isAlive:
+                        icon = f'{relation}_sunk_{ship_class}'
+                    elif not state.isVisible:
+                        icon = f'unspotted_{ship_class}'
+                    else:
+                        icon = f'{relation}_{ship_class}'
+
+                    icon = Image.open(f'assets/public/ship_icons/{icon}.png')
+                    icon = icon.rotate(angle)
+                    scaled_x = int(state.x * base.width / width + base.width / 2)
+                    scaled_y = int(-state.y * base.height / height + base.height / 2)
+                    base.paste(icon, (scaled_x - icon.width // 2, scaled_y - icon.height // 2), icon)
+
+                    if state.isAlive and relation != 'self':
+                        size = base_draw.textsize(short_name.upper(), font=WG_FONT_BOLD, spacing=4)
+                        base_draw.text((scaled_x - size[0] // 2, scaled_y + 14), text=short_name.upper(), spacing=4,
+                                       fill=TL_COLORS[relation], font=WG_FONT_BOLD, align='center')
+
+            del base_draw
+            return numpy.array(base)
+
+        with imageio.get_writer(f'assets/temp/{ctx.message.id}.mp4', output_params=['-crf', '10'],
+                                fps=60, **{'macro_block_size': None}) as writer:
+            for time, player_states in info['timedPlayerStates'].items():
+                # print(info['caps_history'][time])
+                writer.append_data(await self.bot.loop.run_in_executor(ThreadPoolExecutor(), create_frame, time, player_states))
+
+        await ctx.send(file=discord.File(f'assets/temp/{ctx.message.id}.mp4', filename=f'timelapse.mp4'))
+        os.remove(f'assets/temp/{ctx.message.id}.mp4')
+
+    def fetch_players(self, region, search):
+        return getattr(self.api, region).account.list(search=search, limit=4)
+
+    def fetch_ship_stats(self, region, player_id, gamemode, ships):
+        extra = (['pvp_solo', 'pvp_div2', 'pvp_div3'] if gamemode == 'pvp' else
+                 ['pve', 'pve_solo', 'pve_div2', 'pve_div3'] if gamemode == 'pve' else
+                 ['rank_solo', 'rank_div2', 'rank_div3'])
+        return getattr(self.api, region).ships.stats(account_id=player_id, ship_id=ships, extra=extra).data[str(player_id)]
+
+    def clean(self, string):
+        string = unidecode(string)
+        for char in (' ', '-', '.'):
+            string = string.replace(char, '')
+        return string.lower()
+
+    def get_ships(self, search):
+        ships = []
+        for ship_id, details in self.bot.encyclopedia_ships.items():
+            if not details['has_demo_profile']:
+                cleaned_search = self.clean(search)
+                cleaned_name = self.clean(details['name'])
+
+                if cleaned_search == cleaned_name:
+                    return [ship_id]
+                elif cleaned_search in cleaned_name:
+                    if len(ships) == 10:
+                        raise utils.CustomError('>10 ships returned by query. Be more specific.')
+                    ships.append(ship_id)
+
+        if not ships:
+            raise utils.CustomError(f'No ships found with `{search}`.')
+        else:
+            return ships
+
+    @commands.command(hidden=True, aliases=['s'], brief='yet another stats command')
+    @commands.is_owner()
+    async def stats(self, ctx, gamemode: utils.SetValue(GAMEMODES_ACCEPTED) = 'pvp',
+                    region: utils.SetValue(REGION_CODES) = None, player=None, *, ship=None):
+        if region is None:
+            return await ctx.send('`region` is required.')
+        elif player is None:
+            return await ctx.send('`player` is required.')
+
+        gamemode = GAMEMODES_ALIASES.get(gamemode, gamemode)
+
+        players = await self.bot.loop.run_in_executor(ThreadPoolExecutor(), self.fetch_players, region, player)
+        if not players:
+            return await ctx.send(f'No players found with `{player}`. Please try again.')
+        elif player.lower() != players[0]['nickname'].lower() and len(players) > 1:
+            nicknames = '\n- '.join(player['nickname'] for player in players)
+            return await ctx.send(f'Many players found with `{player}`. Did you mean:\n- {nicknames}')
+        player = players[0]
+
+        ship_stats = await self.bot.loop.run_in_executor(ThreadPoolExecutor(), self.fetch_ship_stats,
+                                                         region, player['account_id'], gamemode, self.get_ships(ship))
+        if not ship_stats:
+            return await ctx.send(f'Didn\'t find any ships in {player["nickname"]}\'s port with `{ship}`.')
+
+        # Sometimes ships that the player does not have are still returned
+        # This may only happen on test ships? Observed with Smaland
+        # Regardless, fixed by checking for zero battle count.
+        ships = []
+        for ship in ship_stats:
+            battles = 0
+            for key, value in ship.items():
+                try:
+                    battles += value['battles']
+                except (KeyError, TypeError):
+                    continue
+            if battles > 0:
+                ships.append(ship)
+        if not ships:
+            return await ctx.send(f'Didn\'t find any ships in {player["nickname"]}\'s port with battles in the specified gamemode (Randoms by default).')
+        elif len(ships) > 1:
+            names = ', '.join([f'`{self.bot.encyclopedia_ships[str(ship["ship_id"])]["name"]}`' for ship in ships])
+            return await ctx.send(f'Found many ships ({names}). Please refine your search.')
+
+        ship = ships[0]
+        # Ranked doesn't seem to have an all-inclusive block, so I created one here
+        if gamemode == 'rank':
+            ship['rank'] = {}
+            for key in ('main_battery', 'second_battery', 'ramming', 'torpedoes', 'aircraft'):
+                ship['rank'][key] = {'max_frags_battle': max(ship['rank_solo'][key]['max_frags_battle'],
+                                                             ship['rank_div2'][key]['max_frags_battle'],
+                                                             ship['rank_div3'][key]['max_frags_battle']),
+                                     'frags': (ship['rank_solo'][key]['frags'] +
+                                               ship['rank_div2'][key]['frags'] +
+                                               ship['rank_div3'][key]['frags'])}
+                if key != 'ramming':
+                    ship['rank'][key]['hits'] = (ship['rank_solo'][key]['hits'] +
+                                                 ship['rank_div2'][key]['hits'] +
+                                                 ship['rank_div3'][key]['hits'])
+                    ship['rank'][key]['shots'] = (ship['rank_solo'][key]['shots'] +
+                                                 ship['rank_div2'][key]['shots'] +
+                                                 ship['rank_div3'][key]['shots'])
+            for key in ('max_xp', 'max_damage_scouting', 'max_total_agro', 'max_frags_battle', 'max_damage_dealt', 'max_planes_killed'):
+                ship['rank'][key] = max(ship['rank_solo'][key],
+                                        ship['rank_div2'][key],
+                                        ship['rank_div3'][key])
+            for key in ('art_agro', 'ships_spotted', 'xp', 'survived_battles', 'dropped_capture_points', 'torpedo_agro',
+                        'draws', 'planes_killed', 'battles', 'team_capture_points', 'frags', 'damage_scouting',
+                        'capture_points', 'survived_wins', 'wins', 'losses', 'damage_dealt', 'team_dropped_capture_points'):
+                ship['rank'][key] = (ship['rank_solo'][key] +
+                                     ship['rank_div2'][key] +
+                                     ship['rank_div3'][key])
+
+        for key in (gamemode, gamemode + '_solo', gamemode + '_div2', gamemode + '_div3'):
+            expected = self.wowsnumbers[str(ship['ship_id'])]
+            battles = ship[key]['battles']
+
+            r_dmg = ship[key]['damage_dealt'] / (battles * expected['average_damage_dealt']) if battles != 0 else 0
+            r_wins = 100 * ship[key]['wins'] / (battles * expected['win_rate']) if battles != 0 else 0
+            r_frags = ship[key]['frags'] / (battles * expected['average_frags']) if battles != 0 else 0
+
+            n_dmg = max(0, (r_dmg - 0.4) / 0.6)
+            n_frags = max(0, (r_frags - 0.1) / 0.9)
+            n_wins = max(0, (r_wins - 0.7) / 0.3)
+
+            ship[key]['pr'] = 700 * n_dmg + 300 * n_frags + 150 * n_wins
+
+        # print(json.dumps(ship, indent=4))
+        # keys for other info such as ship_id, last_battle_time, distance in first dictionary
+        menu = ShipStatsMenu(gamemode, region, player, ship, ctx.message.id)
+        await menu.start(ctx)
 
 
 def setup(bot):

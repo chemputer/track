@@ -4,11 +4,16 @@ import sys
 import traceback
 import time
 import pickle
+import sqlite3
 
 from discord.ext import commands
 
 import config
 import utils
+
+DEFAULT_GUILD_SETTINGS = {'prefixes': config.default_prefixes, 'builds_channel': None,
+                          'disabled_commands': set(), 'disabled_cogs': set()}
+DEFAULT_GUILD_ROW = (pickle.dumps(config.default_prefixes), None, pickle.dumps(set()), pickle.dumps(set()))
 
 
 class Track(commands.AutoShardedBot):
@@ -36,11 +41,21 @@ class Track(commands.AutoShardedBot):
         self.color = config.color  # color used to theme embeds
 
     async def get_prefix(self, message):
-        prefixes = {f'<@!{self.user.id}> ', f'<@{self.user.id}> '}  # Nicknamed mention and normal mention, respectively.
+        prefixes = {f'<@!{self.user.id}> ', f'<@{self.user.id}> '}  # Nicknamed mention and normal mention, respectively
         if message.guild is None:
             return prefixes | config.default_prefixes
         else:
-            return prefixes | self.guild_options[message.guild.id]['prefixes']
+            try:
+                return prefixes | self.guild_options[message.guild.id]['prefixes']
+            except KeyError:
+                print('Attempting to fix missing guild...')
+                try:
+                    self.guild_options[message.guild.id] = DEFAULT_GUILD_SETTINGS.copy()
+                    async with utils.Transaction(self.db) as conn:
+                        await conn.execute('INSERT INTO guilds VALUES (?, ?, ?, ?, ?)', (message.guild.id,) + DEFAULT_GUILD_ROW)
+                    return prefixes | self.guild_options[message.guild.id]['prefixes']
+                except sqlite3.IntegrityError:
+                    pass  # rejoining a guild
 
     async def on_message(self, message):
         if not self.started:

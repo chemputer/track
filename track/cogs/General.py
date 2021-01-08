@@ -249,7 +249,7 @@ class General(commands.Cog):
                         value='Restructured the project.',
                         inline=False)
         embed.add_field(name='Creators',
-                        value='\n'.join(self.bot.get_user(owner).mention for owner in self.bot.owner_ids))
+                        value='\n'.join(f'<@{owner}>' for owner in self.bot.owner_ids))  # this broke apparently
         embed.add_field(name='Created on',
                         value=f'{self.bot.created_on.strftime("%m/%d/%Y")}\n'
                               f'(~{timeago.format(self.bot.created_on, datetime.utcnow())})')
@@ -266,9 +266,11 @@ class General(commands.Cog):
                               f'(~{timeago.format(self.bot.uptime, datetime.utcnow())})')
         embed.add_field(name='Statistics',
                         value=f'Commands Run: {self.bot.stats["commands_run"]}\n'
-                              f'Guilds: {len(list(self.bot.guilds))}\n'
-                              f'Users: {len(list(self.bot.get_all_members()))} '
-                              f'(Unique: {len(set(self.bot.get_all_members()))})')
+                              f'Guilds: {len(list(self.bot.guilds))}\n')
+
+        # f'Users: {len(list(self.bot.get_all_members()))} '
+        # f'(Unique: {len(set(self.bot.get_all_members()))})'
+
         # embed.add_field(name='Acknowledgements',
         #                 value='',
         #                 inline=False)
@@ -298,7 +300,7 @@ class General(commands.Cog):
                             value=f'Guessed: `{data["contours_played"]}`\n'
                                   f'Record: `{data["contours_record"]:.3f}s`')
 
-        if ctx.guild.id == 590412879119777799:
+        if ctx.guild.id == 590412879119777799 or ctx.guild.id == 634643624226848779:
             if data['morning_last'] is None:
                 embed.add_field(name='Morning',
                                 value='No data yet.')

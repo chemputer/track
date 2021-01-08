@@ -33,11 +33,11 @@ class Owner(commands.Cog):
         """
         Sends a message to a channel.
         """
-        channel = await self.bot.get_channel(channel)
+        channel = self.bot.get_channel(channel)
         if channel is None:
             return await ctx.send('Channel not found.')
 
-        await self.bot.get_channel(channel).send(message)
+        await channel.send(message)
         await ctx.message.add_reaction('✅')
 
     @commands.command(brief='Deletes a message from the bot.')
@@ -91,7 +91,7 @@ class Owner(commands.Cog):
         data['morning_skips'] = skips
 
         async with utils.Transaction(self.bot.db) as conn:
-            await conn.execute('UPDATE users SET data = ? WHERE id = ?', (pickle.dumps(data), ctx.author.id))
+            await conn.execute('UPDATE users SET data = ? WHERE id = ?', (pickle.dumps(data), user_id))
 
         await ctx.send('Done.')
 
@@ -114,7 +114,7 @@ class Owner(commands.Cog):
             # await conn.execute(f'UPDATE guilds SET disabled_categories = ?', (pickle.dumps(set()),))
             # await conn.execute('ALTER TABLE guilds RENAME TO guilds_orig')
             # await conn.execute('CREATE TABLE guilds(id INTEGER PRIMARY KEY, prefixes BLOB, builds_channel INTEGER, disabled_commands BLOB, disabled_cogs BLOB)')
-            # await conn.execute('INSERT INTO guilds(id , prefixes, builds_channel, disabled_commands, disabled_cogs) SELECT id , prefixes, builds_channel, disabled_commands, disabled_categories FROM guilds_orig')
+            # await conn.execute('INSERT INTO guilds(id, prefixes, builds_channel, disabled_commands, disabled_cogs) SELECT id , prefixes, builds_channel, disabled_commands, disabled_categories FROM guilds_orig')
             # await conn.execute('DROP TABLE guilds_orig')
             # self.bot.guild_options[ctx.guild.id]['disabled_cogs'] = set()
 
@@ -129,11 +129,31 @@ class Owner(commands.Cog):
             # print(table)
             # await conn.execute('DROP TABLE users_orig')
 
-            print(self.bot.guild_options[ctx.guild.id])
-
             pass
+        peedz = self.bot.get_guild(500601711635726336)
+        peedz_chat = peedz.get_channel(501338962548359179)
+        senate = peedz.get_channel(621648295017709593)
+        # print(peedz.roles)
+        # print(peedz.me.guild_permissions.manage_roles)
+
+        # print('start of fetch')
+        # async for message in senate.history(limit=100):
+        #     print(f'{message.author} {message.content}')
+
+        kia = self.bot.get_guild(690060098558492692)
+        print('\n'.join([f'{channel.name} ({len(channel.members)}) [{channel.id}]' for channel in kia.channels if type(channel) == discord.TextChannel and channel.permissions_for(kia.me).read_messages]))
+        t_channel = kia.get_channel(692530714654015548)
+
+        print('start of fetch')
+        async for message in t_channel.history(limit=100):
+            print(f'{message.author} {message.content}')
+
         await ctx.send('Done.')
 
+    @commands.command(brief='Temp fix.')
+    async def fixc(self, ctx, num: int):
+        self.bot.stats['commands_run'] = num
+        await ctx.send('Done.')
 
 def setup(bot):
     bot.add_cog(Owner(bot))

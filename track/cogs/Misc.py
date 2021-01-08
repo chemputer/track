@@ -1,14 +1,19 @@
 from discord.ext import commands, menus
 import discord
+import mimetypes
+import io
 
 import difflib
 import random
-import re
+import numpy
+import sys
+from PIL import Image
 
 import utils
 
 BUKI_EMOJI_SERVERS = (552570749953507338, 611977431959732234,
-                      641016852864040991, 677591786138632192)
+                      641016852864040991, 677591786138632192,
+                      758054424940773520, 789203100308602920)
 # Shouldn't need 13 secondary car colors, but just in case
 ESCAPE_MAPPING = {'EXIT': '<:exit:721338399276924998>',
                   'o': '<:e:721338399176523856>',
@@ -45,7 +50,40 @@ BUKIPASTAS = ['You’re in a desert walking along in the sand when all of the su
               'sunk in her sleep. Ironic. She could save others from sinking, but not herself.',
               'Then out spake brave Fubuki,\nThe Captain of the Destroyer:\n\"To every buki upon this earth\n'
               'Death cometh soon or late.\nAnd how can any buki die better\nThan facing fearful odds,\n'
-              'For the ashes of her builders,\nAnd the temples of her Emperors.\"']
+              'For the ashes of her builders,\nAnd the temples of her Emperors.\"',
+              'Buki, furious, ship of avengers and prophets, banner of the righteous,\n'
+              'Special type destroyer, grant power to thy combined fleet.\n'
+              'Me, thy faithful combined fleet, recall.\n'
+              'Aim my guns, my strike with thy destructive might, provide.\n'
+              'Rivets and joints from my foes\' ships, yield.\n'
+              'Guide my blessed torpedoes, my target—slay.',
+              'For myself, I like a Buki that includes much that is unknown and, at the same time, much that is knowable. '
+              'A Buki in which everything is known would be static and dull, as boring as the heaven of some weak-minded '
+              'militarist. A Buki that is unknowable is no fit place for a thinking being. The ideal Buki for us is one '
+              'very much like the warships we command. And I would guess that this is not really much of a coincidence. ',
+              'And he said with a loud voice, \"Fear Buki, and give glory to her; for the hour of her judgement has come: '
+              'and worship her that made heaven, and earth, and the sea, and the fountains of waters.\"\nRev. 14:7',
+              'When I was a young Buki\n'
+              'My Admiral took me into the harbour\n'
+              'To see a naval parade\n'
+              'He said, \"Buki, when you grow up\n'
+              'Would you be the savior of the broken\n'
+              'The beaten, and the damned?\"\n'
+              'He said, \"Will you defeat them\n'
+              'Your demons and all the non-believers?\n'
+              'The plans that they have made?\n'
+              'Because one day, I\'ll leave you\n'
+              'A phantom to lead you in the summer\n'
+              'To join the Kantai Kessen\"',
+              'Cannon to right of them,\n'
+              'Torpedo to left of them,\n'
+              'Cruiser in front of them\n'
+              '   Volleyed and thundered;\n'
+              'Stormed at with shot and shell,\n'
+              'Boldly they sailed and well,\n'
+              'Into the Kantai kessen,\n'
+              'Into the mouth of hell\n'
+              '   Sailed the six Bukis.']
 
 
 class EscapeMenu(menus.Menu):
@@ -296,9 +334,9 @@ class Misc(commands.Cog):
     #     pattern = re.compile('%[^%]+%')
     #     await ctx.send(re.sub(pattern, replace, string))
 
-    @buki.command(brief='Not mom\'s lasagna.')
+    @commands.command(brief='Not mom\'s lasagna.')
     @commands.cooldown(rate=1, per=15, type=commands.BucketType.user)
-    async def pasta(self, ctx, num: int):
+    async def bukipasta(self, ctx, num: int):
         """
         Curated pastas from our chefs at the Buki Emote Servers.
         """
@@ -323,6 +361,38 @@ class Misc(commands.Cog):
         """
         await ctx.send('https://cdn.discordapp.com/attachments/651330014532468736/717655219780976650/Aaaaaaaaaaaaahhhh_hd.mp4')
 
+    @commands.command(aliases=['pog'], brief='poggers')
+    @commands.cooldown(rate=1, per=15, type=commands.BucketType.user)
+    async def poggers(self, ctx):
+        """
+        poggers
+        """
+        await ctx.send('https://cdn.discordapp.com/attachments/651330014532468736/725481166248869918/poggers.mp4')
+
+    @commands.command(aliases=['notpog'], brief='not poggers')
+    @commands.cooldown(rate=1, per=15, type=commands.BucketType.user)
+    async def notpoggers(self, ctx):
+        """
+        not poggers
+        """
+        await ctx.send('https://cdn.discordapp.com/attachments/649340509579378708/743702971174486037/notpoggers.mp4')
+
+    @commands.command(brief='based dragon')
+    @commands.cooldown(rate=1, per=15, type=commands.BucketType.user)
+    async def based(self, ctx):
+        """
+        based dragon
+        """
+        await ctx.send('https://cdn.discordapp.com/attachments/651330014532468736/739766716225159228/based.mp4')
+
+    @commands.command(hidden=True)
+    @commands.cooldown(rate=1, per=15, type=commands.BucketType.user)
+    async def dbh(self, ctx):
+        """
+        don't do it
+        """
+        await ctx.send('https://media.discordapp.net/attachments/651329954331754497/752055956271005787/dbh.gif')
+
     @commands.command(hidden=True, brief='<:omegalul:651328721327882240>')
     @commands.cooldown(rate=1, per=15, type=commands.BucketType.user)
     async def wow(self, ctx, *, message):
@@ -331,6 +401,77 @@ class Misc(commands.Cog):
         """
         message = discord.utils.escape_mentions(message)
         await ctx.send(' '.join(list(message.upper())).replace('O', '<:omegalul:653131858791628840>'))
+
+    @commands.command(hidden=True, brief='azur lane')
+    @commands.cooldown(rate=1, per=15, type=commands.BucketType.user)
+    async def azurlane(self, ctx):
+        """
+        safe for kids
+        """
+        await ctx.send('https://media.discordapp.net/attachments/651324664496521225/794114196954152980/azur_lane.png')
+
+    @staticmethod
+    def find_coeffs(pa, pb):
+        """
+        shamelessly stolen from https://stackoverflow.com/questions/14177744/how-does-perspective-transformation-work-in-pil
+        """
+        matrix = []
+        for p1, p2 in zip(pa, pb):
+            matrix.append([p1[0], p1[1], 1, 0, 0, 0, -p2[0] * p1[0], -p2[0] * p1[1]])
+            matrix.append([0, 0, 0, p1[0], p1[1], 1, -p2[1] * p1[0], -p2[1] * p1[1]])
+
+        A = numpy.matrix(matrix, dtype=numpy.float)
+        B = numpy.array(pb).reshape(8)
+
+        res = numpy.dot(numpy.linalg.inv(A.T * A) * A.T, B)
+        return numpy.array(res).reshape(8)
+
+    @commands.command(hidden=True, brief='.')
+    @commands.cooldown(rate=1, per=5, type=commands.BucketType.user)
+    async def office(self, ctx):
+        """
+        https://twitter.com/ElijahSchaffer/status/1346905425543917573
+        """
+        if not ctx.message.attachments:
+            return await ctx.send('No attachments found to use.')
+        elif len(ctx.message.attachments) > 1:
+            return await ctx.send('Please provide only one image.')
+        elif not mimetypes.guess_type(ctx.message.attachments[0].url)[0].startswith('image'):
+            return await ctx.send('Attachment is not an image?...')
+
+        temp, fp = io.BytesIO(), io.BytesIO()
+        await ctx.message.attachments[0].save(temp)
+        img = Image.open(temp)
+
+        width, height = img.size
+        ratio_diff = width / height - 16 / 9
+
+        if ratio_diff < -0.05:  # width is too short, letterbox sides
+            new_width = int(height * 16 / 9)
+            pad_width = int((new_width - width) / 2)
+            blank = Image.new('RGBA', (new_width, height), (255, 255, 255, 255))
+            blank.paste(img, (pad_width, 0))
+            img = blank.copy()
+        elif ratio_diff > 0.05:  # width is too long, letterbox top & bottom
+            new_height = int(width * 9 / 16)
+            pad_height = int((new_height - height) / 2)
+            blank = Image.new('RGBA', (width, new_height), (255, 255, 255, 255))
+            blank.paste(img, (0, pad_height))
+            img = blank.copy()
+
+        img = img.resize((848, 477))  # approximate to size of monitor
+        coeffs = self.find_coeffs([(5, 1), (810, 30), (809, 445), (0, 477)],
+                                  [(0, 0), (848, 0), (848, 477), (0, 477)])
+        img = img.transform((848, 477), Image.PERSPECTIVE, coeffs, Image.BICUBIC)
+
+        base = Image.new('RGBA', (1684, 1263), (0, 0, 0, 0))
+        base.paste(img, (395, 471))
+        mask = Image.open('assets/private/pls_base.png')
+        base.paste(mask, (0, 0), mask)
+
+        base.save(fp, 'PNG')
+        fp.seek(0)
+        await ctx.send(file=discord.File(fp, filename='masked.png'))
 
 
 def setup(bot):

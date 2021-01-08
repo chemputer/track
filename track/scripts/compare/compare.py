@@ -5,34 +5,18 @@ import pickle
 
 import deepdiff
 
-VER_1 = '0_9_4_ST1.data'
-VER_2 = '0_9_4_ST2.data'
+VER_1 = '0991.data'
+VER_2 = '0910.data'
 
 
 class GPEncode(json.JSONEncoder):
-    def default(self, o):  # pylint: disable=E0202
-        def has_dict(o):
-            try:
-                o.__dict__
-                return True
-            except AttributeError:
-                return False
-
-        if has_dict(o):
-            t = o.__dict__
-            for key in t:
-                if isinstance(t[key], str):
-                    try:
-                        t[key].decode('utf8')
-                    except:
-                        try:
-                            t[key] = t[key].decode('MacCyrillic')
-                        except:
-                            try:
-                                t[key] = t[key].encode('hex')
-                            except:
-                                pass
+    def default(self, o):
+        try:
+            for e in ['Cameras', 'DockCamera', 'damageDistribution']:
+                o.__dict__.pop(e, o.__dict__)
             return o.__dict__
+        except:
+            return {}
 
 
 def process_file(file):
@@ -47,7 +31,7 @@ def process_file(file):
     deflate = struct.pack('B' * len(data), *data[::-1])
     print('Decompressing data.')
     decompressed = zlib.decompress(deflate)
-    pickle_data = pickle.loads(decompressed, encoding='MacCyrillic')
+    pickle_data = pickle.loads(decompressed, encoding='latin1')
     print('Converting to dict.')
     raw = json.loads(json.dumps(pickle_data, cls=GPEncode, sort_keys=True, indent=4, separators=(',', ': ')))
     print('Getting entity types.')
