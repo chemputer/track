@@ -12,4 +12,10 @@ polib
 lxml
 deepdiff
 pycryptodome
+<<<<<<< HEAD
 imageio
+schedule
+git+git://github.com/Rapptz/discord-ext-menus
+=======
+imageio
+>>>>>>> 0657d6386d29413d7866f63c915166093f68f04e

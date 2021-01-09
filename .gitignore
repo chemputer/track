@@ -1,0 +1,15 @@
+__MACOSX/
+config.py
+**/assets/private
+**/assets/public/ship_icons
+**/assets/temp
+GameParams.data
+*.db
+**/__pycache__/**
+*.pyc
+config.*.*
+v3.7/
+v3.9/
+venv/
+rush.txt
+
