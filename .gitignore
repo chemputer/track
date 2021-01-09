@@ -1,0 +1,13 @@
+.idea/
+config.py
+**/assets/private
+GameParams.data
+*.db
+venv/
+**/__pycache__
+*.pyc
+config.*.*
+v3.7/
+v3.9/
+venv/
+replay_unpack/
