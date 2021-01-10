@@ -6,6 +6,13 @@ config.py
 GameParams.data
 *.db
 **/__pycache__/**
+.idea/
+config.py
+**/assets/private
+GameParams.data
+*.db
+venv/
+**/__pycache__
 *.pyc
 config.*.*
 v3.7/
