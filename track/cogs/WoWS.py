@@ -91,7 +91,7 @@ _base_fp = {3: 0.9667, 4: 0.9001, 5: 0.8335, 6: 0.7669, 7: 0.7003, 8: 0.6337, 9:
 
 
 REGION_CODES = ['na', 'eu', 'ru', 'asia']
-VERSION = '0.9.5.1'
+VERSION = '0.9.11'
 MAPLESYRUP_URL = 'http://maplesyrup.sweet.coocan.jp/wows/shipstatswk/'
 SKILL_NICKNAMES = {'1': ['bft'], '2': ['bos'], '3': ['em'], '4': ['tae'],
                    '5': ['ha'], '7': ['vig', 'vigi'], '8': ['de'], '9': ['aft'],
@@ -107,7 +107,7 @@ SIMILAR_SHIPS: List[Tuple] = [('PASB017', 'PASB510'),  # Montana, Ohio
                               ('PGSC508', 'PGSC108', 'PGSC518'),  # Prinz Eugen, Hipper, Mainz
                               ('PASC020', 'PASC710'),  # Des Moines, Salem
                               ('PJSB509', 'PJSB018', 'PJSB510'),  # Musashi, Yamato, Shikishima
-                              ('PASB518', 'PASB508'),  # Massachusetts, Alabama
+                              ('PASB012', 'PASB508', 'PASB518', 'PASB517'),  # North Carolina, Alabama, Massachusetts, Florida
                               ('PBSB107', 'PBSB527'),  # King George V, Duke Of York
                               ('PZSC508', 'PRSC508'),  # Irian, Kutuzov
                               ('PRSC606', 'PGSC106'),  # Makarov, Nurnberg
@@ -121,16 +121,27 @@ SIMILAR_SHIPS: List[Tuple] = [('PASB017', 'PASB510'),  # Montana, Ohio
                               ('PASD008', 'PZSD108'),  # Benson, Hsienyang
                               ('PBSC508', 'PBSC208'),  # Cheshire, Albemarle
                               ('PFSB109', 'PFSB510'),  # Alsace, Bourgogne
-                              ('PRSD207', 'PRSD507')]  # Minsk, Leningrad
+                              ('PRSD207', 'PRSD507'),  # Minsk, Leningrad
+                              ('PGSD519', 'PGSD110', 'PGSD107'),  # Z-35, Z-44, Leberecht Maass
+                              ('PASA110', 'PASA510'),  # Midway, Franklin D. Roosevelt
+                              ('PASB006', 'PASB705'),  # New York, Texas
+                              ('PRSC108', 'PRSC518'),  # Chapayev, Lazo
+                              ('PBSC108', 'PBSC510'),  # Edinburgh, Plymouth
+                              ('PGSA518', 'PGSA108')]  # Graf Zeppelin, August von Parseval
 WG_LOGO = 'https://cdn.discordapp.com/attachments/651324664496521225/651332148963442688/logo.png'
 DEFAULT_GROUPS = ('start', 'peculiar', 'demoWithoutStats', 'earlyAccess', 'special', 'ultimate',
-                  'specialUnsellable', 'upgradeableExclusive', 'upgradeable')
-GUESS_GROUPS = ('start', 'peculiar', 'special', 'ultimate',
-                'specialUnsellable', 'upgradeableExclusive', 'upgradeable')
+                  'specialUnsellable', 'upgradeableExclusive', 'upgradeable', 'upgradeableUltimate')
+GUESS_GROUPS = ('start', 'peculiar', 'special', 'ultimate', 'specialUnsellable',
+                'upgradeableExclusive', 'upgradeable', 'upgradeableUltimate')
 GUESS_BLOCKED = ('Alabama ST', 'Arkansas Beta', 'Siliwangi', 'Wukong', 'Bajie')
 MAPLESYRUP_COLORS = {'na': [0.4901, 0.7647, 0.9607, 1], 'eu': [0.4901, 0.9607, 0.6235, 1],
                      'ru': [0.9607, 0.4039, 0.4039, 1], 'asia': [0.9490, 0.5019, 0.6901, 1]}
+MS_GRAPH_TYPES = ('battles', 'winrate', 'damage')
 MAPLESYRUP_LABELS = {'battles': 'Battles', 'winrate': 'Winrate (%)', 'damage': 'Damage'}
+MAPLESYRUP_MAPPING = {'battles': ('total battles', 'total battles'),
+                      'winrate': ('average of rates', 'win'),
+                      'damage': ('average of rates', 'damagecaused')}
+HISTDATA_CHANNEL = 797620471452663818
 TL_GRIDS = 10
 TL_SAMPLE_RATE = 0.5
 TL_COLORS = {'ally': (70, 224, 163), 'enemy': (248, 64, 0),
@@ -147,13 +158,14 @@ THRESHOLDS: List[ArmorThreshold] = [ArmorThreshold(k, name, TierBound(*bound))
                                     for name, bound in v.items()]
 BASE_FP: Dict[Tier, float] = {k: v for k, v in _base_fp.items()}
 GAMEMODES_ACCEPTED = ['randoms', 'pvp', 'coop', 'co-op', 'pve', 'rank', 'ranked']
-GAMEMODES_ALIASES = {'randoms': 'pvp', 'coop': 'pve', 'co-op': 'pve', 'ranked': 'rank',}
+GAMEMODES_ALIASES = {'randoms': 'pvp', 'coop': 'pve', 'co-op': 'pve', 'ranked': 'rank'}
 
 # excluded i, I, 1, O, 0 from Base62 to prevent confusion
 hashids = Hashids(min_length=3, alphabet='abcdefghjklmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789')
 logging.getLogger('aiosqlite').setLevel(logging.CRITICAL)
 sns.set(style='dark', font='Trebuchet MS', font_scale=0.9, rc={'axes.facecolor': (0, 0, 0, 0),
                                                                'axes.labelcolor': 'white',
+                                                               'figure.figsize': (10.0, 4.5),
                                                                'text.color': 'white',
                                                                'xtick.color': 'white',
                                                                'ytick.color': 'white',
@@ -162,8 +174,7 @@ sns.set(style='dark', font='Trebuchet MS', font_scale=0.9, rc={'axes.facecolor':
                                                                'xtick.bottom': True,
                                                                'ytick.left': True,
                                                                'axes.spines.top': False,
-                                                               'axes.spines.right': False,
-                                                               'figure.figsize': (10.0, 4.5)})
+                                                               'axes.spines.right': False})
 # matplotlib.font_manager._rebuild()
 matplotlib.use('agg')
 
@@ -225,6 +236,7 @@ class Ships(commands.Converter):
         unavailable - Inaccessible ships such as Operation enemies.
         upgradeableExclusive - Free EXP ships such as Nelson and Alaska.
         upgradeable - Normal tech-tree ships.
+        upgradeableUltimate - Free EXP ships such as Smaland and Hayate.
         """
         self.one = one
         self.groups = groups
@@ -357,7 +369,6 @@ class HEMenu(menus.Menu):
 
     async def send_initial_message(self, ctx, channel):
         embed = self.generate_embed()
-        self.last_page = embed
         return await ctx.send(embed=embed)
 
     def generate_embed(self):
@@ -546,7 +557,6 @@ class APMenu(menus.Menu):
 
     async def send_initial_message(self, ctx, channel):
         embed = self.generate_embed()
-        self.last_page = embed
         return await ctx.send(embed=embed)
 
     def generate_embed(self):
@@ -812,6 +822,97 @@ class ShipStatsMenu(menus.Menu):
         await self.message.edit(embed=self.generate_embed(self.gamemode + '_div3'))
 
 
+class MSMenu(menus.Menu):
+    def __init__(self, ship, data, times):
+        super().__init__(clear_reactions_after=True)
+        self.ship = ship
+        self.data = data
+        self.times = times
+        self.step = WoWS.get_step(self.times)
+        self.completed_graphs = {'battles': None, 'winrate': None, 'damage': None}
+        self.last_page = None
+
+    async def send_initial_message(self, ctx, channel):
+        embed = await self.generate_embed('battles')
+        return await ctx.send(embed=embed)
+
+    async def generate_embed(self, graph):
+        embed = discord.Embed(title=f'Historical Data for {self.ship.name}',
+                              description='Use the reactions below to navigate this interactive embed.\n\n'
+                                          'Available graphs:\n'
+                                          '- Battles vs. Time (⚔️)\n'
+                                          '- Winrate vs. Time (👑)\n'
+                                          '- Damage vs. Time (💥)\n',
+                              color=self.bot.color)
+        if self.completed_graphs[graph] is None:
+            fp = await self.bot.loop.run_in_executor(ThreadPoolExecutor(), WoWS.histdata_image,
+                                                     self.ship, self.data, graph, self.times, self.step)
+            message = await self.bot.get_channel(HISTDATA_CHANNEL).send(file=discord.File(fp, 'graph.png'))
+            img_url = message.attachments[0].url
+            self.completed_graphs[graph] = img_url
+            embed.set_image(url=img_url)
+        else:
+            embed.set_image(url=self.completed_graphs[graph])
+        return embed
+
+    @menus.button('⏹️', position=menus.Last(1))
+    async def end(self, payload):
+        """
+        Stops the interactive session.
+        """
+        self.stop()
+
+    @menus.button('❓', position=menus.Last(0))
+    async def info(self, payload):
+        """
+        Toggle the help page.
+        """
+        if self.last_page is not None:
+            await self.message.edit(embed=self.last_page)
+            self.last_page = None
+        else:
+            self.last_page = self.message.embeds[0]
+
+            embed = discord.Embed(title='histdata - Help',
+                                  description='The historical performance for ships can be viewed with this command.\n'
+                                              'To view different metrics, use the reactions below to switch through the available graphs.\n'
+                                              'Alternatively, you may use the `histdata graph` subcommand to request a specific graph'
+                                              'and skip the interactive session.\n\n'
+                                              'Data is unit-based and from [Suihei Koubou](http://maplesyrup.sweet.coocan.jp/wows/).',
+                                  color=self.bot.color)
+            for emoji, button in self.buttons.items():
+                embed.add_field(name=emoji,
+                                value=button.action.__doc__,
+                                inline=False)
+            await self.message.edit(embed=embed)
+
+    @menus.button('⚔️')
+    async def battles(self, payload):
+        """
+        Battles vs. Time graph.
+        """
+        self.last_page = None
+
+        await self.message.edit(embed=await self.generate_embed('battles'))
+
+    @menus.button('👑')
+    async def winrate(self, payload):
+        """
+        Winrate vs. Time graph.
+        """
+        self.last_page = None
+
+        await self.message.edit(embed=await self.generate_embed('winrate'))
+
+    @menus.button('💥')
+    async def damage(self, payload):
+        """
+        Damage vs. Time graph.
+        """
+        self.last_page = None
+
+        await self.message.edit(embed=await self.generate_embed('damage'))
+
 
 class WoWS(commands.Cog, name='Wows'):
     """
@@ -828,6 +929,7 @@ class WoWS(commands.Cog, name='Wows'):
                            ru=wargaming.WoWS(config.wg_token, region='ru', language='en'),
                            asia=wargaming.WoWS(config.wg_token, region='asia', language='en'))
 
+        self.bot.histdata_channel = self.bot.get_channel(HISTDATA_CHANNEL)
         self.bot.globalmo = {entry.msgid: entry.msgstr for entry in polib.mofile('assets/private/global.mo')}
         self.skills = self.api.na.encyclopedia.crewskills().data
         self.bot.encyclopedia_ships = {}
@@ -1359,8 +1461,91 @@ class WoWS(commands.Cog, name='Wows'):
             async with utils.Transaction(self.bot.db) as conn:
                 await conn.execute('UPDATE users SET data = ? WHERE id = ?', (pickle.dumps(data), message.author.id))
 
-    @commands.command(aliases=['maplesyrup'], brief='View a ships\'s historical data.')
-    async def histdata(self, ctx, graph: utils.SetValue(['battles', 'winrate', 'damage']), *, ship: MSConverter):
+    @staticmethod
+    def correct_ms_data(ship):
+        # API data seems to contain many false points.
+        # Values can be observed before the ship is even available.
+        # These are usually zero, but sometimes are not.
+        # Old versions of ships have strange data values after they are shelved as well.
+        # I attempt to fix this by selecting the longest consecutive streak of non-zero
+        # values after removing zero values (protecting new releases)
+        data = {region: {} for region in ship.regions}
+
+        for region, samples in ship.regions.items():
+            leading_zero_flag = False
+            current = {}
+
+            for sample in samples:
+                string = str(sample['date'])
+                unix = datetime(year=int(string[0:4]),
+                                month=int(string[4:6]),
+                                day=int(string[6:8])).timestamp()
+
+                if sample['data'][('total battles', 'total battles')] != 0:
+                    leading_zero_flag = True
+                    current[unix] = sample['data']
+                else:
+                    if leading_zero_flag and len(current) > len(data[region]):
+                        data[region] = current
+
+            if leading_zero_flag and len(current) > len(data[region]):
+                data[region] = current
+
+        return data
+
+    @staticmethod
+    def get_step(times):
+        bounds = times[-1] - times[0]
+        if bounds > 31536000:  # year
+            return 5256576 * ((bounds + 10512000) // 31536000)  # multiple of 2 mo
+        elif bounds > 21024000:  # 8 mo
+            return 3942000  # 1.5 mo
+        elif bounds > 5256000:  # 2 mo
+            return 2628000  # 1 mo
+        else:
+            return 604800  # 1 week
+
+    @staticmethod
+    def histdata_image(ship, data, graph, times, step):
+        stat = MAPLESYRUP_MAPPING[graph]
+        graph_fp, final_fp = io.BytesIO(), io.BytesIO()
+
+        formatted = {'Time': times}
+        for region, samples in data.items():
+            formatted[region] = [None if time not in samples else samples[time][stat]
+                                 for time in times]
+
+        df = pandas.DataFrame(formatted)
+        colors = [MAPLESYRUP_COLORS[region] for region in data]
+        g = sns.lineplot(x='Time', y=MAPLESYRUP_LABELS[graph], hue='Regions', palette=colors,
+                         data=pandas.melt(df, ['Time'], var_name='Regions', value_name=MAPLESYRUP_LABELS[graph]))
+        g.xaxis.set_major_locator(matplotlib.ticker.MultipleLocator(step))
+        dates = [pandas.to_datetime(tm, unit='s').strftime('%Y-%m-%d') for tm in g.get_xticks()]
+        g.set_xticklabels(dates)
+        if graph.lower() == 'damage':
+            g.set_yticklabels([f'{int(num / 1000)}{"k" if int(num) != 0 else ""}' for num in g.get_yticks()])
+        g.figure.suptitle(f'{ship.name}: {graph.title()} vs. Time', x=0.525, y=0.95)
+        g.figure.subplots_adjust(bottom=0.150, top=0.875, left=0.100, right=0.95)
+        g.get_legend().get_frame().set_facecolor((0.1, 0.1, 0.1, 0))
+        g.axes.xaxis.labelpad = 11
+        g.axes.yaxis.labelpad = 11
+
+        g.figure.savefig(graph_fp, facecolor=(54/255, 57/255, 62/255, 1), edgecolor='none')
+        g.figure.clf()
+        graph_fp.seek(0)
+        graph = Image.open(graph_fp)
+
+        track_logo = Image.open('assets/public/track.png')
+        track_logo = track_logo.resize((90, 20))
+        graph.paste(track_logo, (900, 420), track_logo)
+        graph.save(final_fp, 'PNG')
+        final_fp.seek(0)
+
+        return final_fp
+
+    @commands.group(aliases=['maplesyrup', 'ms'], invoke_without_command=True, brief='View a ships\'s historical data.')
+    @commands.cooldown(rate=1, per=4, type=commands.BucketType.user)
+    async def histdata(self, ctx, *, ship: MSConverter):
         """
         View the historical performance for specified ships over time.
 
@@ -1368,86 +1553,29 @@ class WoWS(commands.Cog, name='Wows'):
         Uses data from [Suihei Koubou](http://maplesyrup.sweet.coocan.jp/wows/).
         Uses unit-based data; i.e. the normal dataset.
         """
-        data = {region: {} for region in ship.regions}
-        for region, samples in ship.regions.items():
-            leading_zero_flag = False
-            for sample in samples:
-                string = str(sample['date'])
-                unix = datetime(year=int(string[0:4]),
-                                month=int(string[4:6]),
-                                day=int(string[6:8])).timestamp()
+        data = self.correct_ms_data(ship)
+        times = list(max(data.values(), key=len).keys())
 
-                observation = None
-                if graph == 'battles':
-                    observation = sample['data'][('total battles', 'total battles')]
-                elif graph == 'winrate':
-                    observation = sample['data'][('average of rates', 'win')]
-                elif graph == 'damage':
-                    observation = sample['data'][('average of rates', 'damagecaused')] / 1000
+        if len(times) < 4:
+            return await ctx.send('Not enough data available for this ship at this time. Try again in the future.')
 
-                if observation is not None and (observation != 0 or leading_zero_flag):
-                    data[region][unix] = observation
-                    leading_zero_flag = True
+        await MSMenu(ship, data, times).start(ctx)
 
-        def generate_graph():
-            fp = io.BytesIO()
+    @histdata.command(brief='Pulls specific graph without interactive embed.')
+    async def graph(self, ctx, graph: utils.SetValue(MS_GRAPH_TYPES), *, ship: MSConverter):
+        """
+        Pulls specific graphs without the interactive embed.
+        This is the old behavior of the command.
+        """
+        data = self.correct_ms_data(ship)
+        times = list(max(data.values(), key=len).keys())
 
-            times = list(max(data.values(), key=len).keys())
+        if len(times) < 4:
+            return await ctx.send('Not enough data available for this ship at this time. Try again in the future.')
 
-            if len(times) < 4:
-                raise utils.CustomError('Not enough data for this ship at this time. Try again in the future.')
-
-            bounds = times[-1] - times[0]
-            if bounds > 31536000:  # year
-                step = 5256576 * ((bounds + 10512000) // 31536000)  # multiple of 2 mo
-            elif bounds > 21024000:  # 8 mo
-                step = 3942000  # 1.5 mo
-            elif bounds > 5256000:  # 2 mo
-                step = 2628000  # 1 mo
-            else:
-                step = 604800  # 1 week
-
-            formatted = {'Time': times}
-            for region, points in data.items():
-                formatted[region] = [None if time not in points else points[time]
-                                     for time in times]
-
-            df = pandas.DataFrame(formatted)
-            colors = [MAPLESYRUP_COLORS[region] for region in data]
-            g = sns.lineplot(x='Time', y=MAPLESYRUP_LABELS[graph], hue='Regions', palette=colors,
-                             data=pandas.melt(df, ['Time'], var_name='Regions', value_name=MAPLESYRUP_LABELS[graph]))
-            g.xaxis.set_major_locator(matplotlib.ticker.MultipleLocator(step))
-            dates = [pandas.to_datetime(tm, unit='s').strftime('%Y-%m-%d') for tm in g.get_xticks()]
-            g.set_xticklabels(dates)
-            if graph.lower() == 'damage':
-                g.set_yticklabels([f'{int(num)}{"k" if int(num) != 0 else ""}' for num in g.get_yticks()])
-            g.figure.suptitle(f'{ship.name}: {graph.title()} vs. Time', x=0.525, y=0.95)
-            g.figure.subplots_adjust(bottom=0.150, top=0.875, left=0.100, right=0.95)
-            g.get_legend().get_frame().set_facecolor((0.1, 0.1, 0.1, 0))
-            g.axes.xaxis.labelpad = 11
-            g.axes.yaxis.labelpad = 11
-
-            g.figure.savefig(fp, facecolor=(0, 0, 0, 0), edgecolor='none')
-            g.figure.clf()
-            fp.seek(0)
-
-            return fp
-
-        def generate_final(fp):
-            new_fp = io.BytesIO()
-
-            post = Image.open(fp)
-            track_logo = Image.open('assets/public/track.png')
-            track_logo = track_logo.resize((90, 20))
-            post.paste(track_logo, (900, 420), track_logo)
-            post.save(new_fp, 'PNG')
-            new_fp.seek(0)
-
-            return new_fp
-
-        graph_image = await self.bot.loop.run_in_executor(ThreadPoolExecutor(), generate_graph)
-        final_image = await self.bot.loop.run_in_executor(ThreadPoolExecutor(), generate_final, graph_image)
-        await ctx.send(file=discord.File(final_image, 'graph.png'))
+        fp = await self.bot.loop.run_in_executor(ThreadPoolExecutor(), self.histdata_image,
+                                                 ship, data, graph, times, self.get_step(times))
+        await ctx.send(file=discord.File(fp, 'graph.png'))
 
     @staticmethod
     def get_map_dimensions(map_name):
@@ -1525,39 +1653,6 @@ class WoWS(commands.Cog, name='Wows'):
 
         del overlay_draw
         return Image.alpha_composite(base, overlay)
-
-    @commands.command(hidden=True)
-    @commands.cooldown(rate=1, per=5, type=commands.BucketType.user)
-    async def pz(self, ctx):
-        """
-        extract winner & timestamp
-        """
-        if not ctx.message.attachments:
-            return await ctx.send('No attachment found to use.')
-        elif len(ctx.message.attachments) > 1:
-            return await ctx.send('Please attach only one file.')
-        elif not ctx.message.attachments[0].filename.endswith('.wowsreplay'):
-            return await ctx.send('Are you sure this is a WoWS replay file?')
-
-        async with ctx.typing():
-            fp = io.BytesIO()
-            await ctx.message.attachments[0].save(fp)
-            reader = utils.ReplayReader(fp)
-            data = await self.bot.loop.run_in_executor(ThreadPoolExecutor(), reader.get_data)
-            version = data.engine_data['clientVersionFromExe']
-            await ctx.send('Parse successful.')
-
-        async with ctx.typing():
-            try:
-                replay_player = ReplayPlayer(version[:version.rfind(',')].replace(',', '_'))
-            except RuntimeError as e:
-                return await ctx.send('Version not supported :(.')
-            await self.bot.loop.run_in_executor(ThreadPoolExecutor(), replay_player.play, data.decrypted_data)
-            info = replay_player.get_info()
-            await ctx.send('Encrypted data processed.')
-
-        await ctx.send(f'Battle result: `{info["battle_result"]}`')
-        await ctx.send(f'Owner team ID: `{info["owner_team_id"]}`')
 
     @commands.command(aliases=['tl'], brief='Generates timelapse video from replay.')
     @commands.cooldown(rate=1, per=20, type=commands.BucketType.user)
