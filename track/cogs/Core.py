@@ -5,7 +5,8 @@ import sys
 import pickle
 import sqlite3
 
-from discord.ext import commands
+from discord.ext import commands, menus
+import discord
 import aiosqlite
 
 import config
@@ -14,6 +15,7 @@ import utils
 DEFAULT_GUILD_SETTINGS = {'prefixes': config.default_prefixes, 'builds_channel': None,
                           'disabled_commands': set(), 'disabled_cogs': set()}
 DEFAULT_GUILD_ROW = (pickle.dumps(config.default_prefixes), None, pickle.dumps(set()), pickle.dumps(set()))
+ERROR_CHANNEL_ID = 721202051090219068
 
 
 def dict_factory(cursor, row):
@@ -27,6 +29,7 @@ def dict_factory(cursor, row):
 class Core(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self.err_channel = None
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -60,6 +63,7 @@ class Core(commands.Cog):
 
             self.bot.started = True
 
+        self.err_channel = self.bot.get_channel(ERROR_CHANNEL_ID)
         print(f'Ready!          [{datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")}]\n'
               f'Name: {self.bot.user} | ID: {self.bot.user.id}')
 
@@ -114,8 +118,28 @@ class Core(commands.Cog):
         elif isinstance(error, (commands.UserInputError, commands.ConversionError)):
             return await ctx.send(error)
 
-        print(f'Ignoring exception in command {ctx.command}:', file=sys.stderr)
-        traceback.print_exception(type(error), error, error.__traceback__, file=sys.stderr)
+        elif isinstance(error, (discord.Forbidden, menus.MenuError)):
+            try:
+                return await ctx.send(f'Bot is missing permissions to execute this command :(\n'
+                                      f'Error: `{error}`')
+            except discord.Forbidden:
+                pass
+
+        try:
+            embed = discord.Embed(title=f'{type(error).__module__}: {type(error).__qualname__}',
+                                  description=str(error),
+                                  color=self.bot.color)
+            embed.add_field(name='Context',
+                            value=f'Guild: {ctx.guild.name} (`{ctx.guild.id}`)\n'
+                                  f'Channel: {ctx.channel.name} (`{ctx.channel.id}`)\n'
+                                  f'User: {ctx.author.name} (`{ctx.author.id}`)',
+                            inline=False)
+            embed.add_field(name='Invocation Text',
+                            value=f'```{ctx.message.content}```')
+            await self.err_channel.send(embed=embed)
+        except:
+            print(f'Ignoring exception in command {ctx.command}:', file=sys.stderr)
+            traceback.print_exception(type(error), error, error.__traceback__, file=sys.stderr)
 
     async def bot_check_once(self, ctx):
         if ctx.guild is None:
