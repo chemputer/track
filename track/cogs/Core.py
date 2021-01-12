@@ -15,7 +15,8 @@ import utils
 DEFAULT_GUILD_SETTINGS = {'prefixes': config.default_prefixes, 'builds_channel': None,
                           'disabled_commands': set(), 'disabled_cogs': set()}
 DEFAULT_GUILD_ROW = (pickle.dumps(config.default_prefixes), None, pickle.dumps(set()), pickle.dumps(set()))
-ERROR_CHANNEL_ID = 721202051090219068
+ERRORS_CHANNEL_ID = 721202051090219068
+MENTIONS_CHANNEL_ID = 721201467137982544
 
 
 def dict_factory(cursor, row):
@@ -29,7 +30,6 @@ def dict_factory(cursor, row):
 class Core(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.err_channel = None
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -61,9 +61,11 @@ class Core(commands.Cog):
                 stats = await c.fetchone()
                 self.bot.stats = stats if stats is not None else Counter()
 
+            self.bot.errors_channel = self.bot.get_channel(ERRORS_CHANNEL_ID)
+            self.bot.mentions_channel = self.bot.get_channel(MENTIONS_CHANNEL_ID)
+
             self.bot.started = True
 
-        self.err_channel = self.bot.get_channel(ERROR_CHANNEL_ID)
         print(f'Ready!          [{datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")}]\n'
               f'Name: {self.bot.user} | ID: {self.bot.user.id}')
 
@@ -83,6 +85,34 @@ class Core(commands.Cog):
                 await conn.execute('INSERT INTO guilds VALUES (?, ?, ?, ?, ?)', (guild.id,) + DEFAULT_GUILD_ROW)
         except sqlite3.IntegrityError:
             pass  # rejoining a guild
+
+    @commands.Cog.listener()
+    async def on_message(self, message):
+        if self.bot.started:
+            for mention in message.mentions:
+                if mention.id == self.bot.user.id:
+                    embed = discord.Embed(title='New Mention',
+                                          description='',
+                                          color=self.bot.color)
+                    if isinstance(message.channel, discord.TextChannel):
+                        embed.add_field(name='Context',
+                                        value=f'Guild: {message.guild} (`{message.guild.id}`)\n'
+                                              f'Channel: {message.channel} (`{message.channel.id}`)\n'
+                                              f'Member: {message.author} (`{message.author.id}`)',
+                                        inline=False)
+                    elif isinstance(message.channel, (discord.DMChannel, discord.GroupChannel)):
+                        embed.add_field(name='Context',
+                                        value=f'DM/Group Channel (`{message.channel.id}`)\n'
+                                              f'User: {message.author} (`{message.author.id}`)',
+                                        inline=False)
+                    else:
+                        embed.add_field(name='Context',
+                                        value='Unknown.',
+                                        inline=False)
+                    embed.add_field(name='Invocation Text',
+                                    value=f'```{message.content}```')
+                    await self.bot.mentions_channel.send(embed=embed)
+                    break
 
     @commands.Cog.listener()
     async def on_command_error(self, ctx, error):
@@ -129,14 +159,24 @@ class Core(commands.Cog):
             embed = discord.Embed(title=f'{type(error).__module__}: {type(error).__qualname__}',
                                   description=str(error),
                                   color=self.bot.color)
-            embed.add_field(name='Context',
-                            value=f'Guild: {ctx.guild.name} (`{ctx.guild.id}`)\n'
-                                  f'Channel: {ctx.channel.name} (`{ctx.channel.id}`)\n'
-                                  f'User: {ctx.author.name} (`{ctx.author.id}`)',
-                            inline=False)
+            if isinstance(ctx.channel, discord.TextChannel):
+                embed.add_field(name='Context',
+                                value=f'Guild: {ctx.guild} (`{ctx.guild.id}`)\n'
+                                      f'Channel: {ctx.channel} (`{ctx.channel.id}`)\n'
+                                      f'Member: {ctx.author} (`{ctx.author.id}`)',
+                                inline=False)
+            elif isinstance(ctx.channel, (discord.DMChannel, discord.GroupChannel)):
+                embed.add_field(name='Context',
+                                value=f'DM/Group Channel (`{ctx.channel.id}`)\n'
+                                      f'User: {ctx.author} (`{ctx.author.id}`)',
+                                inline=False)
+            else:
+                embed.add_field(name='Context',
+                                value='Unknown.',
+                                inline=False)
             embed.add_field(name='Invocation Text',
                             value=f'```{ctx.message.content}```')
-            await self.err_channel.send(embed=embed)
+            await self.bot.errors_channel.send(embed=embed)
         except:
             print(f'Ignoring exception in command {ctx.command}:', file=sys.stderr)
             traceback.print_exception(type(error), error, error.__traceback__, file=sys.stderr)

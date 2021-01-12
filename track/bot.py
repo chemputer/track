@@ -58,10 +58,8 @@ class Track(commands.AutoShardedBot):
                     pass  # rejoining a guild
 
     async def on_message(self, message):
-        if not self.started:
-            return
-
-        await self.process_commands(message)
+        if self.started:
+            await self.process_commands(message)
 
     async def logout(self):
         async with utils.Transaction(self.db) as conn:
