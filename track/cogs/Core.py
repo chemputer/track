@@ -15,8 +15,8 @@ import utils
 DEFAULT_GUILD_SETTINGS = {'prefixes': config.default_prefixes, 'builds_channel': None,
                           'disabled_commands': set(), 'disabled_cogs': set()}
 DEFAULT_GUILD_ROW = (pickle.dumps(config.default_prefixes), None, pickle.dumps(set()), pickle.dumps(set()))
-ERRORS_CHANNEL_ID = 721202051090219068
-MENTIONS_CHANNEL_ID = 721201467137982544
+ERRORS_CHANNEL_ID = config.error_channel_id
+MENTIONS_CHANNEL_ID = config.mentions_channel_id
 
 
 def dict_factory(cursor, row):

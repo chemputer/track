@@ -32,7 +32,7 @@ import os
 
 import config
 import utils
-from replay_unpack.clients.wows import ReplayPlayer
+from libs.replay_unpack.clients.wows import ReplayPlayer
 
 
 Tier = int
@@ -141,7 +141,7 @@ MAPLESYRUP_LABELS = {'battles': 'Battles', 'winrate': 'Winrate (%)', 'damage': '
 MAPLESYRUP_MAPPING = {'battles': ('total battles', 'total battles'),
                       'winrate': ('average of rates', 'win'),
                       'damage': ('average of rates', 'damagecaused')}
-HISTDATA_CHANNEL = 797620471452663818
+HISTDATA_CHANNEL = config.histdata_channel_id
 TL_GRIDS = 10
 TL_SAMPLE_RATE = 0.5
 TL_COLORS = {'ally': (70, 224, 163), 'enemy': (248, 64, 0),
