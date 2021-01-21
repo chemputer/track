@@ -140,6 +140,7 @@
 		</heatInfos>
 	</Properties>
 	<TempProperties>
+		<ammoEffects/>
 		<terminalBallistics/>
 		<workingCrashCrewCount/>
 		<splashHitLocations/>

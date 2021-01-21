@@ -74,7 +74,7 @@
 			<Default> 0 </Default>
 		</isTeamkiller>
 		
-		<!-- Rank info in ranked battles (packed rank + season id). See AccountHelpers.RankBattlesManager. -->
+		<!-- Rank info in ranked battles (packed rank + season id). See AccountHelpers.RankedManager. -->
 		<rank>
 			<Type> UINT32 </Type>
 			<Flags> BASE </Flags>
