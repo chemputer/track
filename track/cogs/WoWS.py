@@ -32,7 +32,7 @@ import os
 
 import config
 import utils
-from libs.replay_unpack.clients.wows import ReplayPlayer
+from replay_unpack.clients.wows import ReplayPlayer
 
 
 Tier = int
