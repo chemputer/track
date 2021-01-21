@@ -2,7 +2,6 @@ __MACOSX/
 config.py
 **/assets/private
 **/assets/public/ship_icons
-**/assets/temp/**
 GameParams.data
 **/__pycache__/**
 .idea/
