@@ -2,15 +2,15 @@ __MACOSX/
 config.py
 **/assets/private
 **/assets/public/ship_icons
-/assets/temp/*
+**/assets/temp/**
 GameParams.data
-*.db
 **/__pycache__/**
 .idea/
 config.py
 **/assets/private
 GameParams.data
 *.db
+!maplesyrup.db
 venv/
 **/__pycache__
 *.pyc
