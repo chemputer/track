@@ -100,6 +100,7 @@ class Entity:
         method_hash = self._spec.get_name() + '_' + method.get_name()
 
         subscriptions = Entity._methods_subscriptions.get(method_hash, [])
+        # print(method.get_name())
         if not subscriptions:
             return
 

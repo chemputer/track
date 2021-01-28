@@ -26,21 +26,25 @@ from .network.packets import (
 class ReplayPlayer(ControlledPlayerBase):
 
     def _get_definitions(self, version):
-        try:
-            return get_definitions('_'.join(version[:4]))
-        except RuntimeError:
-            return get_definitions('_'.join(version[:3]))
+        # try:
+        #     return get_definitions('_'.join(version[:4]))
+        # except RuntimeError:
+        #     return get_definitions('_'.join(version[:3]))
+        return get_definitions(version)
 
     def _get_controller(self, version):
-        try:
-            return get_controller('_'.join(version[:4]))
-        except RuntimeError:
-            return get_controller('_'.join(version[:3]))
+        # try:
+        #     return get_controller('_'.join(version[:4]))
+        # except RuntimeError:
+        #     return get_controller('_'.join(version[:3]))
+        return get_controller(version)
 
     def _get_packets_mapping(self):
         return PACKETS_MAPPING
 
-    def _process_packet(self, packet):
+    def _process_packet(self, packet, time):
+
+        self._battle_controller.update(time)
 
         if isinstance(packet, Map):
             logging.debug('Welcome to map %s: %s', packet.name, packet.arenaId)

@@ -95,6 +95,7 @@
 			<weather><Type>INT8</Type></weather>
 			<level><Type>INT8</Type></level>
 			<teamBuildType><Type>UINT8</Type></teamBuildType>
+			<regionID><Type>STRING</Type></regionID>
 			<sseInfo><Type>STRING</Type></sseInfo>
 			<pveInfo><Type>UINT64</Type></pveInfo>
 			<realms><Type>ARRAY<of>STRING</of></Type></realms>
@@ -128,6 +129,7 @@
 			<level><Type>UINT32</Type></level>
 			<rankInfo><Type>UINT32</Type></rankInfo>
 			<isAbuser><Type>BOOL</Type></isAbuser>
+			<regionID><Type>STRING</Type></regionID>
 			<comment><Type>STRING</Type></comment>
 			<clanInfo><Type>PLAYER_CLAN_INFO</Type></clanInfo>
 			<dogTag><Type>ARRAY<of>GAMEPARAMS_ID</of></Type></dogTag>
@@ -218,6 +220,7 @@
 			<creatorInfo><Type>PRE_BATTLE_CREATOR_DEF</Type></creatorInfo>
 			<senderInfo><Type>PRE_BATTLE_SENDER_DEF</Type></senderInfo>
 			<state><Type>STRING</Type></state>
+			<regionID><Type>STRING</Type></regionID>
 			<!--comment><Type>UNICODE_STRING</Type></comment-->
 		</Properties>
 	</PRE_BATTLE_INVITE_DEF>
@@ -567,6 +570,20 @@
 				<planeParamsID> <Type>	GAMEPARAMS_ID	</Type> </planeParamsID>
 		</Properties>
 	</AIR_THREAT>
+
+	<RANK_BATTLES_PLAYER_INFO>
+		FIXED_DICT
+		<Properties>
+			<seasonId>  <Type> UINT16 </Type> </seasonId>
+			<stars>     <Type> UINT8 </Type> </stars>
+			<rank>      <Type> UINT8 </Type> </rank>
+			<rankBest>  <Type> UINT8 </Type> </rankBest>
+			<league>    <Type> UINT8 </Type> </league>
+			<stage>     <Type> UINT8 </Type> </stage>
+			<startRank> <Type> UINT8 </Type> </startRank>
+		</Properties>
+	</RANK_BATTLES_PLAYER_INFO>
+
 
 	<WATER_HIT_INFO>
 		FIXED_DICT
@@ -1455,16 +1472,4 @@
 		<implementedBy>NullableDef.nullableFloatConverter</implementedBy>
 	</NULLABLE_FLOAT>
 
-	<ACCOUNT_LOAD_ARGS>
-		FIXED_DICT
-		<Properties>
-			<loadReason><Type>UINT8</Type></loadReason>
-			<loadCode><Type>UINT8</Type></loadCode>
-			<requester><Type>MAILBOX</Type></requester>
-			<requestID><Type>UINT64</Type></requestID>
-			<removeAccount><Type>BOOL</Type></removeAccount>
-			<ignoreMasterShutdown><Type>BOOL</Type></ignoreMasterShutdown>
-		</Properties>
-		<implementedBy>AccountLoadArgsDef.converter</implementedBy>
-	</ACCOUNT_LOAD_ARGS>
 </root>

@@ -197,7 +197,7 @@
         <setTrace>
             <Arg>BOOL</Arg>
         </setTrace>
-        <curVersion_release_9_11_0_3173843></curVersion_release_9_11_0_3173843>
+        <curVersion_release_9_10_0_3052606></curVersion_release_9_10_0_3052606>
         <updateSSEProgress>
             <Arg>STRING</Arg>
         </updateSSEProgress>
@@ -246,14 +246,17 @@
             <Arg>UINT32</Arg>
             <Arg>MSGPACK_BLOB</Arg>
         </receiveTransactionState>
+        <onGetRankBattlesPlayerInfo>
+            <Arg>RANK_BATTLES_PLAYER_INFO</Arg>
+            <Arg>UINT32</Arg>
+            <Arg>ARRAY
+                <of>INT8</of>
+            </Arg>
+        </onGetRankBattlesPlayerInfo>
         <onGetRankBattlesStage>
             <Arg>UINT32</Arg>
             <Arg>UINT8</Arg>
-            <Arg>INT8</Arg>
-            <Arg>INT8</Arg>
-            <Arg>INT8</Arg>
         </onGetRankBattlesStage>
-        <onStartSyncRankBattles></onStartSyncRankBattles>
         <onChangeShutdown>
             <Arg>BOOL</Arg>
             <Arg>UINT8</Arg>
@@ -476,6 +479,7 @@
     <CellMethods></CellMethods>
     <BaseMethods>
         <getAccountData>
+            <Arg>STRING</Arg>
             <Arg>STRING</Arg>
             <Arg>STRING</Arg>
             <Arg>UINT32</Arg>

@@ -1049,6 +1049,5 @@
             <Exposed>OWN_CLIENT</Exposed>
         </setInvitationsEnabled>
     </BaseMethods>
-    <shouldBackup>false</shouldBackup>
 </root>
 
