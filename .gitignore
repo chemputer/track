@@ -1,17 +1,15 @@
-__MACOSX/
+**MACOSX**/
 config.py
 **/assets/private
 **/assets/public/ship_icons
 /assets/temp/*
 GameParams.data
-*.db
 **/__pycache__/**
 .idea/
 config.py
 **/assets/private
 GameParams.data
 *.db
-venv/
 **/__pycache__
 *.pyc
 config.*.*
@@ -20,3 +18,4 @@ v3.9/
 venv/
 rush.txt
 replay_unpack.old
+*.code-workspace
