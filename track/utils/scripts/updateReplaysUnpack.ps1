@@ -1,0 +1,1 @@
+foreach ($d in (get-childitem -Directory .\replays_unpack\replay_unpack\clients\wows\versions)){cp .\utils\battle_controller.py replays_unpack\replay_unpack\clients\wows\versions\$d\}
