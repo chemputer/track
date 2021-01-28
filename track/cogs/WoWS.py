@@ -931,7 +931,9 @@ class WoWS(commands.Cog, name='Wows'):
 
         self.bot.histdata_channel = self.bot.get_channel(HISTDATA_CHANNEL)
         self.bot.globalmo = {entry.msgid: entry.msgstr for entry in polib.mofile('assets/private/global.mo')}
-        self.skills = self.api.na.encyclopedia.crewskills().data
+        
+        # needed to comment this out as the 0.10.0 skill change messed this up
+        #self.skills = self.api.na.encyclopedia.crewskills().data
         self.bot.encyclopedia_ships = {}
         page = 1
         while True:
@@ -1017,254 +1019,257 @@ class WoWS(commands.Cog, name='Wows'):
         # HULL: health, maxSpeed, rudderTime, turningRadius
 
         await ctx.send(file=discord.File(fp, filename=f'ship_bar.png'), embed=embed)
+    
+    # The builds system will need a rework simply due to the rework on 0.10.0
+    # @commands.command(hidden=True, brief='Loads skill data from WGAPI.')
+    # @commands.is_owner()
+    # async def api_skills(self, ctx):
+    #     """
+    #     Loads skill data from WGAPI.
+    #     """
+    #     self.skills = self.api.na.encyclopedia.crewskills().data
+    #     print(json.dumps(self.skills, indent=4))
+    #     await ctx.send('Done.')
 
-    @commands.command(hidden=True, brief='Loads skill data from WGAPI.')
-    @commands.is_owner()
-    async def api_skills(self, ctx):
-        """
-        Loads skill data from WGAPI.
-        """
-        self.skills = self.api.na.encyclopedia.crewskills().data
-        print(json.dumps(self.skills, indent=4))
-        await ctx.send('Done.')
+    # @commands.command(hidden=True, brief='Updates maplesyrup data.')
+    # @commands.is_owner()
+    # async def update_ms(self, ctx):
+    #     pattern = re.compile(r'(\w+)/\w+_(\w+)')
 
-    @commands.command(hidden=True, brief='Updates maplesyrup data.')
-    @commands.is_owner()
-    async def update_ms(self, ctx):
-        pattern = re.compile(r'(\w+)/\w+_(\w+)')
+    #     async with utils.Transaction(self.bot.maplesyrup) as conn:
+    #         await conn.execute('CREATE TABLE IF NOT EXISTS record (id TEXT PRIMARY KEY)')
 
-        async with utils.Transaction(self.bot.maplesyrup) as conn:
-            await conn.execute('CREATE TABLE IF NOT EXISTS record (id TEXT PRIMARY KEY)')
+    #         async with aiohttp.ClientSession() as cs:
+    #             async with cs.get(MAPLESYRUP_URL) as index:
+    #                 soup = BeautifulSoup(await index.text(), 'html.parser')
+    #                 table = soup.find('table')
 
-            async with aiohttp.ClientSession() as cs:
-                async with cs.get(MAPLESYRUP_URL) as index:
-                    soup = BeautifulSoup(await index.text(), 'html.parser')
-                    table = soup.find('table')
+    #                 links = []
+    #                 for row in table.findAll("tr")[1:]:
+    #                     for cell in row:
+    #                         link = cell.find('a')
+    #                         if link is not None and link != -1:
+    #                             match = re.search(pattern, link['href'])
+    #                             try:
+    #                                 await conn.execute('INSERT INTO record VALUES (?)', (f'{match[1]}_{match[2]}',))
+    #                                 links.append({'region': match[1], 'date': int(match[2]), 'link': link['href'][2:]})
+    #                             except sqlite3.IntegrityError:
+    #                                 pass
 
-                    links = []
-                    for row in table.findAll("tr")[1:]:
-                        for cell in row:
-                            link = cell.find('a')
-                            if link is not None and link != -1:
-                                match = re.search(pattern, link['href'])
-                                try:
-                                    await conn.execute('INSERT INTO record VALUES (?)', (f'{match[1]}_{match[2]}',))
-                                    links.append({'region': match[1], 'date': int(match[2]), 'link': link['href'][2:]})
-                                except sqlite3.IntegrityError:
-                                    pass
+    #                 if not links:
+    #                     return await ctx.send('No new data to process.')
 
-                    if not links:
-                        return await ctx.send('No new data to process.')
+    #                 await ctx.send(f'Processing `{len(links)}` new links.')
 
-                    await ctx.send(f'Processing `{len(links)}` new links.')
+    #                 for count, link in enumerate(links, start=1):
+    #                     print(f'Processing link {count} of {len(links)}.')
 
-                    for count, link in enumerate(links, start=1):
-                        print(f'Processing link {count} of {len(links)}.')
+    #                     async with cs.get(MAPLESYRUP_URL + link['link']) as html:
+    #                         dataframe = pandas.read_html(await html.text())[0]
 
-                        async with cs.get(MAPLESYRUP_URL + link['link']) as html:
-                            dataframe = pandas.read_html(await html.text())[0]
+    #                         for index, series in dataframe.iterrows():
+    #                             dict_ver = series.to_dict()
+    #                             name = link['region'] + '_' + dict_ver[('name', 'name')]
+    #                             await conn.execute(f'CREATE TABLE IF NOT EXISTS "{name}" (date INTEGER PRIMARY KEY, data BLOB)')
+    #                             await conn.execute(f'INSERT INTO "{name}" VALUES (?, ?)', (link['date'], pickle.dumps(dict_ver)))
+    #                     await asyncio.sleep(0.25)
 
-                            for index, series in dataframe.iterrows():
-                                dict_ver = series.to_dict()
-                                name = link['region'] + '_' + dict_ver[('name', 'name')]
-                                await conn.execute(f'CREATE TABLE IF NOT EXISTS "{name}" (date INTEGER PRIMARY KEY, data BLOB)')
-                                await conn.execute(f'INSERT INTO "{name}" VALUES (?, ?)', (link['date'], pickle.dumps(dict_ver)))
-                        await asyncio.sleep(0.25)
+    #     await ctx.send('Done.')
 
-        await ctx.send('Done.')
+    # def convert_skill(self, string):
+    #     for skill, data in self.skills.items():
+    #         if string == data['name'].lower():
+    #             return skill
+    #     for skill, nicks in SKILL_NICKNAMES.items():
+    #         if string in nicks:
+    #             return skill
+    #     raise utils.CustomError(f'Unable to resolve `{string}` as a captain skill.')
 
-    def convert_skill(self, string):
-        for skill, data in self.skills.items():
-            if string == data['name'].lower():
-                return skill
-        for skill, nicks in SKILL_NICKNAMES.items():
-            if string in nicks:
-                return skill
-        raise utils.CustomError(f'Unable to resolve `{string}` as a captain skill.')
+    # def skills_image(self, skills):
+    #     fp = io.BytesIO()
+    #     image = Image.new('RGBA', (680 + 120, 360), (0, 0, 0, 0))
 
-    def skills_image(self, skills):
-        fp = io.BytesIO()
-        image = Image.new('RGBA', (680 + 120, 360), (0, 0, 0, 0))
+    #     def paste(_image, _icon, _x, _y):
+    #         _image.paste(_icon, (_x, _y), _icon)
 
-        def paste(_image, _icon, _x, _y):
-            _image.paste(_icon, (_x, _y), _icon)
+    #     for skill, data in self.skills.items():
+    #         pattern = re.compile('(icon_perk).+(?=_)')
+    #         name = re.search(pattern, data['icon'])[0]
+    #         x = 30 + data['type_id'] * 80 + (data['type_id'] // 2) * 40
+    #         y = 30 + (data['tier'] - 1) * 80
 
-        for skill, data in self.skills.items():
-            pattern = re.compile('(icon_perk).+(?=_)')
-            name = re.search(pattern, data['icon'])[0]
-            x = 30 + data['type_id'] * 80 + (data['type_id'] // 2) * 40
-            y = 30 + (data['tier'] - 1) * 80
+    #         paste(image, Image.open(f'assets/private/big/{name}.png'), x, y)
+    #         if skill not in skills:
+    #             paste(image, Image.open(f'assets/private/big/{name}_inactive.png'), x, y)
+    #         else:
+    #             paste(image, Image.open(f'assets/public/checkmark.png'), x + 65, y + 5)
 
-            paste(image, Image.open(f'assets/private/big/{name}.png'), x, y)
-            if skill not in skills:
-                paste(image, Image.open(f'assets/private/big/{name}_inactive.png'), x, y)
-            else:
-                paste(image, Image.open(f'assets/public/checkmark.png'), x + 65, y + 5)
+    #     image.save(fp, 'PNG')
+    #     fp.seek(0)
+    #     return fp
 
-        image.save(fp, 'PNG')
-        fp.seek(0)
-        return fp
+    # def build_embed(self, build):
+    #     embed = discord.Embed(title=build['title'],
+    #                           description=build['description'],
+    #                           color=self.bot.color,
+    #                           timestamp=discord.utils.snowflake_time(build['id']))
+    #     embed.add_field(name='Skills',
+    #                     value=', '.join([self.skills[skill]['name'] for skill in build['skills']]))
+    #     embed.add_field(name='Author',
+    #                     value=f'<@{build["author"]}>')
+    #     embed.set_footer(text=f'ID: {hashids.encode(build["rowid"])}\n{build["total"]}/19 points')
+    #     embed.set_image(url='attachment://build.png')
 
-    def build_embed(self, build):
-        embed = discord.Embed(title=build['title'],
-                              description=build['description'],
-                              color=self.bot.color,
-                              timestamp=discord.utils.snowflake_time(build['id']))
-        embed.add_field(name='Skills',
-                        value=', '.join([self.skills[skill]['name'] for skill in build['skills']]))
-        embed.add_field(name='Author',
-                        value=f'<@{build["author"]}>')
-        embed.set_footer(text=f'ID: {hashids.encode(build["rowid"])}\n{build["total"]}/19 points')
-        embed.set_image(url='attachment://build.png')
+    #     return embed
 
-        return embed
+    
+    # 
+    # @commands.group(aliases=['build'], invoke_without_command=True, brief='Create and share builds.')
+    # @commands.guild_only()
+    # async def builds(self, ctx, *, build: Builds(one=True)):
+    #     """
+    #     Create and share builds.
 
-    @commands.group(aliases=['build'], invoke_without_command=True, brief='Create and share builds.')
-    @commands.guild_only()
-    async def builds(self, ctx, *, build: Builds(one=True)):
-        """
-        Create and share builds.
+    #     Not using a subcommand searches for builds that match the query.
+    #     Queries search by ID, title, and author.
+    #     """
+    #     image = await self.bot.loop.run_in_executor(ThreadPoolExecutor(), self.skills_image, build['skills'])
+    #     await ctx.send(file=discord.File(image, filename='build.png'), embed=self.build_embed(build))
 
-        Not using a subcommand searches for builds that match the query.
-        Queries search by ID, title, and author.
-        """
-        image = await self.bot.loop.run_in_executor(ThreadPoolExecutor(), self.skills_image, build['skills'])
-        await ctx.send(file=discord.File(image, filename='build.png'), embed=self.build_embed(build))
+    # @builds.command(aliases=['add'], brief='Create a new build.')
+    # @commands.cooldown(rate=1, per=20, type=commands.BucketType.user)
+    # @commands.guild_only()
+    # async def create(self, ctx, title: utils.Max(75), captain_skills: utils.lowercase, description='No description given.'):
+    #     """
+    #     Creates a new build for the current server.
 
-    @builds.command(aliases=['add'], brief='Create a new build.')
-    @commands.cooldown(rate=1, per=20, type=commands.BucketType.user)
-    @commands.guild_only()
-    async def create(self, ctx, title: utils.Max(75), captain_skills: utils.lowercase, description='No description given.'):
-        """
-        Creates a new build for the current server.
+    #     - Note that you must wrap parameters with spaces with quotation marks, "like this".
+    #     - To use quotation marks inside parameters, escape them with `\\"`.
+    #     - `captain_skills` accepts a captain builder link from the WoWS website or comma-separated skill names/abbreviations.
 
-        - Note that you must wrap parameters with spaces with quotation marks, "like this".
-        - To use quotation marks inside parameters, escape them with `\\"`.
-        - `captain_skills` accepts a captain builder link from the WoWS website or comma-separated skill names/abbreviations.
+    #     Example usages:
+    #     `build create "BB Tank Build" https://worldofwarships.eu/en/content/commanders-skills/?skills=2,3,12,14,17,23,28&ship=Battleship`
 
-        Example usages:
-        `build create "BB Tank Build" https://worldofwarships.eu/en/content/commanders-skills/?skills=2,3,12,14,17,23,28&ship=Battleship`
+    #     `build create "9 point CV build" "AS, Improved Engines, AIRCRAFT armor, se" "These skills are \\"necessary\\" for every CV build."`
+    #     """
+    #     pattern = re.compile(r'(?<=\?skills=)[\d,]+(?=&)')
+    #     match = re.search(pattern, captain_skills)
+    #     if match is None:
+    #         skills = [self.convert_skill(entry.strip()) for entry in captain_skills.split(',')]
+    #     else:
+    #         skills = match[0].split(',')
+    #         for skill in skills:
+    #             if skill not in self.skills:
+    #                 return await ctx.send('Link malformed? Verify that it is copy-pasted correctly and retry.')
 
-        `build create "9 point CV build" "AS, Improved Engines, AIRCRAFT armor, se" "These skills are \\"necessary\\" for every CV build."`
-        """
-        pattern = re.compile(r'(?<=\?skills=)[\d,]+(?=&)')
-        match = re.search(pattern, captain_skills)
-        if match is None:
-            skills = [self.convert_skill(entry.strip()) for entry in captain_skills.split(',')]
-        else:
-            skills = match[0].split(',')
-            for skill in skills:
-                if skill not in self.skills:
-                    return await ctx.send('Link malformed? Verify that it is copy-pasted correctly and retry.')
+    #     if len(skills) != len(set(skills)):
+    #         return await ctx.send('Duplicate skills detected.')
 
-        if len(skills) != len(set(skills)):
-            return await ctx.send('Duplicate skills detected.')
+    #     total, tiers = 0, [False, False, False, False]
+    #     for skill in skills:
+    #         tier = self.skills[skill]['tier']
+    #         tiers[tier - 1] = True
+    #         total += tier
 
-        total, tiers = 0, [False, False, False, False]
-        for skill in skills:
-            tier = self.skills[skill]['tier']
-            tiers[tier - 1] = True
-            total += tier
+    #     try:
+    #         if total > 21:
+    #             return await ctx.send(f'This build costs `{total}` points! The max is 21.')
+    #         elif tiers.index(False) < tiers.index(True, tiers.index(False)):
+    #             return await ctx.send('You cannot skip skill tiers.')
+    #     except ValueError:
+    #         pass
 
-        try:
-            if total > 19:
-                return await ctx.send(f'This build costs `{total}` points! The max is 19.')
-            elif tiers.index(False) < tiers.index(True, tiers.index(False)):
-                return await ctx.send('You cannot skip skill tiers.')
-        except ValueError:
-            pass
+    #     async with utils.Transaction(self.bot.db) as conn:
+    #         builds_channel = self.bot.guild_options[ctx.guild.id]['builds_channel']
 
-        async with utils.Transaction(self.bot.db) as conn:
-            builds_channel = self.bot.guild_options[ctx.guild.id]['builds_channel']
+    #         in_queue = 0 if builds_channel is None or ctx.channel.id == builds_channel else 1
+    #         build = {'id': ctx.message.id, 'author': ctx.author.id, 'title': title, 'description': description,
+    #                  'skills': pickle.dumps(skills), 'total': total, 'guild_id': ctx.guild.id, 'in_queue': in_queue}
 
-            in_queue = 0 if builds_channel is None or ctx.channel.id == builds_channel else 1
-            build = {'id': ctx.message.id, 'author': ctx.author.id, 'title': title, 'description': description,
-                     'skills': pickle.dumps(skills), 'total': total, 'guild_id': ctx.guild.id, 'in_queue': in_queue}
+    #         c = await conn.execute('INSERT INTO builds VALUES (?, ?, ?, ?, ?, ?, ?, ?)', list(build.values()))
+    #         build['rowid'] = c.lastrowid
+    #         hash_id = hashids.encode(c.lastrowid)
 
-            c = await conn.execute('INSERT INTO builds VALUES (?, ?, ?, ?, ?, ?, ?, ?)', list(build.values()))
-            build['rowid'] = c.lastrowid
-            hash_id = hashids.encode(c.lastrowid)
+    #         if not in_queue:
+    #             await ctx.send(f'Thank you for submission. ID: `{hash_id}`')
+    #         else:
+    #             await ctx.send(f'Your submission has been sent to this server\'s queue. ID: `{hash_id}`')
 
-            if not in_queue:
-                await ctx.send(f'Thank you for submission. ID: `{hash_id}`')
-            else:
-                await ctx.send(f'Your submission has been sent to this server\'s queue. ID: `{hash_id}`')
+    #             channel = self.bot.get_channel(builds_channel)
+    #             message = (f'New build from {ctx.author.mention} (ID: `{hash_id}`)\n'
+    #                        f'Approve with `build approve {hash_id}`, reject with `build reject {hash_id}`')
+    #             build['skills'] = skills  # bootleg solution tbh
+    #             image = await self.bot.loop.run_in_executor(ThreadPoolExecutor(), self.skills_image, skills)
+    #             await channel.send(message, file=discord.File(image, filename=f'build.png'), embed=self.build_embed(build))
 
-                channel = self.bot.get_channel(builds_channel)
-                message = (f'New build from {ctx.author.mention} (ID: `{hash_id}`)\n'
-                           f'Approve with `build approve {hash_id}`, reject with `build reject {hash_id}`')
-                build['skills'] = skills  # bootleg solution tbh
-                image = await self.bot.loop.run_in_executor(ThreadPoolExecutor(), self.skills_image, skills)
-                await channel.send(message, file=discord.File(image, filename=f'build.png'), embed=self.build_embed(build))
+    # @builds.command(aliases=['remove'], brief='Delete a build.')
+    # @commands.guild_only()
+    # async def delete(self, ctx, *, build: Builds(one=True, queued=True)):
+    #     """
+    #     Deletes a build.
 
-    @builds.command(aliases=['remove'], brief='Delete a build.')
-    @commands.guild_only()
-    async def delete(self, ctx, *, build: Builds(one=True, queued=True)):
-        """
-        Deletes a build.
+    #     Administrators can delete any builds.
+    #     """
+    #     if build['author'] != ctx.author.id and not ctx.author.guild_permissions.administrator:
+    #         return await ctx.send('You cannot delete a build that is not yours!')
 
-        Administrators can delete any builds.
-        """
-        if build['author'] != ctx.author.id and not ctx.author.guild_permissions.administrator:
-            return await ctx.send('You cannot delete a build that is not yours!')
+    #     async with utils.Transaction(self.bot.db) as conn:
+    #         await utils.confirm(ctx, f'\"{build["title"]}\" will be deleted.')
 
-        async with utils.Transaction(self.bot.db) as conn:
-            await utils.confirm(ctx, f'\"{build["title"]}\" will be deleted.')
+    #         await conn.execute(f'DELETE FROM builds WHERE id = ?', (build["id"],))
+    #         await ctx.send('Build deleted.')
 
-            await conn.execute(f'DELETE FROM builds WHERE id = ?', (build["id"],))
-            await ctx.send('Build deleted.')
+    # @builds.command(aliases=['approve'], brief='Accepts a build.')
+    # @commands.guild_only()
+    # async def accept(self, ctx, *, build: Builds(one=True, queued=True, not_queued=False)):
+    #     """
+    #     Accepts a build in queue.
+    #     """
+    #     builds_channel = self.bot.guild_options[ctx.guild.id]['builds_channel']
+    #     if builds_channel is None:
+    #         return await ctx.send('This command may only be used when approve-only mode is active.')
+    #     elif builds_channel != ctx.channel.id:
+    #         return await ctx.send('This command must be used in the designated channel.')
 
-    @builds.command(aliases=['approve'], brief='Accepts a build.')
-    @commands.guild_only()
-    async def accept(self, ctx, *, build: Builds(one=True, queued=True, not_queued=False)):
-        """
-        Accepts a build in queue.
-        """
-        builds_channel = self.bot.guild_options[ctx.guild.id]['builds_channel']
-        if builds_channel is None:
-            return await ctx.send('This command may only be used when approve-only mode is active.')
-        elif builds_channel != ctx.channel.id:
-            return await ctx.send('This command must be used in the designated channel.')
+    #     async with utils.Transaction(self.bot.db) as conn:
+    #         await conn.execute(f'UPDATE builds SET in_queue = 0 WHERE id = ?', (build['id'],))
+    #         await ctx.send('Build accepted.')
 
-        async with utils.Transaction(self.bot.db) as conn:
-            await conn.execute(f'UPDATE builds SET in_queue = 0 WHERE id = ?', (build['id'],))
-            await ctx.send('Build accepted.')
+    # @builds.command(aliases=['deny'], brief='Rejects a build.')
+    # @commands.guild_only()
+    # async def reject(self, ctx, *, build: Builds(one=True, queued=True, not_queued=False)):
+    #     """
+    #     Rejects a build in queue.
+    #     """
+    #     builds_channel = self.bot.guild_options[ctx.guild.id]['builds_channel']
+    #     if builds_channel is None:
+    #         return await ctx.send('This command may only be used when approve-only mode is active.')
+    #     elif builds_channel != ctx.channel.id:
+    #         return await ctx.send('This command must be used in the designated channel.')
 
-    @builds.command(aliases=['deny'], brief='Rejects a build.')
-    @commands.guild_only()
-    async def reject(self, ctx, *, build: Builds(one=True, queued=True, not_queued=False)):
-        """
-        Rejects a build in queue.
-        """
-        builds_channel = self.bot.guild_options[ctx.guild.id]['builds_channel']
-        if builds_channel is None:
-            return await ctx.send('This command may only be used when approve-only mode is active.')
-        elif builds_channel != ctx.channel.id:
-            return await ctx.send('This command must be used in the designated channel.')
+    #     async with utils.Transaction(self.bot.db) as conn:
+    #         await conn.execute(f'DELETE FROM builds WHERE id = ?', (build['id'],))
+    #         await ctx.send('Build rejected.')
 
-        async with utils.Transaction(self.bot.db) as conn:
-            await conn.execute(f'DELETE FROM builds WHERE id = ?', (build['id'],))
-            await ctx.send('Build rejected.')
+    # @builds.command(brief='List builds in this server.')
+    # @commands.guild_only()
+    # async def list(self, ctx):
+    #     c = await self.bot.db.execute('SELECT rowid, * FROM builds WHERE guild_id = ?', (ctx.guild.id,))
+    #     builds = [build async for build in c if not build['in_queue']]
+    #     if not builds:
+    #         return await ctx.send('This server has no builds.')
 
-    @builds.command(brief='List builds in this server.')
-    @commands.guild_only()
-    async def list(self, ctx):
-        c = await self.bot.db.execute('SELECT rowid, * FROM builds WHERE guild_id = ?', (ctx.guild.id,))
-        builds = [build async for build in c if not build['in_queue']]
-        if not builds:
-            return await ctx.send('This server has no builds.')
+    #     embed = discord.Embed(title=f'{ctx.guild.name}\'s Builds',
+    #                           color=ctx.bot.color)
+    #     pages = menus.MenuPages(source=BuildsPages(embed, builds), clear_reactions_after=True)
+    #     await pages.start(ctx)
 
-        embed = discord.Embed(title=f'{ctx.guild.name}\'s Builds',
-                              color=ctx.bot.color)
-        pages = menus.MenuPages(source=BuildsPages(embed, builds), clear_reactions_after=True)
-        await pages.start(ctx)
-
-    @commands.command(aliases=['skillbuilder'], hidden=True, brief='Gives a link to the Commander Skill Builder.')
-    async def csb(self, ctx):
-        """
-        Gives a link to the Commander Skill Builder.
-        """
-        await ctx.send('https://worldofwarships.com/en/content/captains-skills/')
+    # @commands.command(aliases=['skillbuilder'], hidden=True, brief='Gives a link to the Commander Skill Builder.')
+    # async def csb(self, ctx):
+    #     """
+    #     Gives a link to the Commander Skill Builder.
+    #     """
+    #     await ctx.send('https://worldofwarships.com/en/content/captains-skills/')
 
     @commands.command(aliases=['ifhe'], brief='Detailed info about a ship\'s HE.')
     @commands.cooldown(rate=1, per=4, type=commands.BucketType.user)
