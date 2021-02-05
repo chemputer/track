@@ -1695,15 +1695,15 @@ class WoWS(commands.Cog, name='Wows'):
         minimap = await self.bot.loop.run_in_executor(ThreadPoolExecutor(), self.create_minimap, map_name)
         width, height = self.get_map_dimensions(map_name)
 
-        # plane_types = []
-        # for details in info['planes'].values():
-        #     plane_types.append(next(plane['name'] for plane in self.bot.aircraft if details['gameparams_id'] == plane['id']))
-        # print(plane_types)
-        #
-        # types = set()
-        # for aircraft in self.bot.aircraft:
-        #     types.add(aircraft['typeinfo']['species'])
-        # print(types)
+       # plane_types = []
+       # for details in info['planes'].values():
+       #     plane_types.append(next(plane['name'] for plane in self.bot.aircraft if details['gameparams_id'] == plane['id']))
+       # print(plane_types)
+       # 
+       # types = set()
+       # for aircraft in self.bot.aircraft:
+       #     types.add(aircraft['typeinfo']['species'])
+       # print(types)
 
         def draw_priority(player_state):
             player_info = next(player_info for player_info in info['playerInfo']
