@@ -363,9 +363,13 @@ class HEMenu(menus.Menu):
     @staticmethod
     def toggle(var):
         if var:
-            return '<:toggleon1:719882432056393799><:toggleon2:719882432911900803>'
+            return ':white_check_mark:'
+           # return ':heavy_multiplication_x::white_check_mark:'
+           # return '<:toggleon1:719882432056393799><:toggleon2:719882432911900803>'
         else:
-            return '<:toggleoff1:719882434036105236><:toggleoff2:719882431901204542>'
+            return ':x:'
+           # return ':negative_squared_cross_mark::heavy_check_mark:'
+           # return '<:toggleoff1:808812619271897129><:toggleoff2:808812619271897129>'
 
     async def send_initial_message(self, ctx, channel):
         embed = self.generate_embed()
@@ -1660,7 +1664,7 @@ class WoWS(commands.Cog, name='Wows'):
         return Image.alpha_composite(base, overlay)
 
     @commands.command(aliases=['tl'], brief='Generates timelapse video from replay.')
-    @commands.cooldown(rate=1, per=20, type=commands.BucketType.user)
+    @commands.cooldown(rate=1, per=5, type=commands.BucketType.user)
     async def timelapse(self, ctx):
         """
         Generates a timelapse of the minimap from a provided .wowsreplay file.
