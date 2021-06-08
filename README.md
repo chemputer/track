@@ -32,7 +32,7 @@ You can invite the original version of the Padtrack's bot [here](https://discord
 
 # Dependencies
 
-This uses a slightly modified version of replays_unpack by Monstrofil, available [here](https://github.com/Monstrofil/replays_unpack). The modifications were done primarily to the battle_controller.py file, and are available in the fork [here](https://github.com/Monstrofil/replays_unpack).
+This uses a slightly modified version of replays_unpack by Monstrofil, available [here](https://github.com/Monstrofil/replays_unpack). The modifications were done primarily to the battle_controller.py file, and are available in the fork [here](https://github.com/chemputer/replays_unpack).
 
 # Dockerfile
 
