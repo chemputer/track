@@ -51,15 +51,17 @@ class Help(commands.HelpCommand):
                      mention_everyone=False, send_tts_messages=False)
 
         embed = discord.Embed(title='Help',
-                              description='A niche bot focused on providing WoWS utilities.\n'
-                                          'Contact Trackpad#1234 for issues.',
+                              description='A niche bot focused on providing WoWS utilities originally made by Trackpad.\n'
+                                          'Contact Chemputer#4790 for issues.',
                               color=self.context.bot.color)
         embed.add_field(name='Command Categories',
                         value='\n'.join([f'{cog.emoji} {cog.display_name}' for cog in cogs]))
         embed.add_field(name='Links',
                         value=f'[Invite me here!]({discord.utils.oauth_url(self.context.bot.user.id, perms)})\n'
-                              '[Support server](https://discord.gg/dU39sjq)\n'
+                              '[Support server - Trackpad Original Bot](https://discord.gg/dU39sjq)\n'
+                              '[Support Server - Chemputers Fork](https://discord.gg/tkZk6h99fG)\n'
                               '[Source code](https://github.com/padtrack/track)\n'
+                              '[Source code of this fork](https://github.com/chemputer/track)\n'
                               '[Need WoWS help?](https://discord.gg/c4vK9rM)\n')
         embed.set_thumbnail(url='https://cdn.discordapp.com/attachments/651324664496521225/651326808423137300/thumbnail.png')
         embed.set_footer(text='Use the below reactions or help <category> / help <command> to view details')

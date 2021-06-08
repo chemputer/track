@@ -1708,7 +1708,11 @@ class WoWS(commands.Cog, name='Wows'):
        # for aircraft in self.bot.aircraft:
        #     types.add(aircraft['typeinfo']['species'])
        # print(types)
-
+        def rchop(s, suffix):
+            if suffix and s.endswith(suffix):
+                return s[:-len(suffix)]
+            return s
+        
         def draw_priority(player_state):
             player_info = next(player_info for player_info in info['playerInfo']
                                if player_info.avatarId == player_state.avatarId)
@@ -1755,12 +1759,12 @@ class WoWS(commands.Cog, name='Wows'):
             return numpy.array(base)
 
         with imageio.get_writer(f'assets/temp/{ctx.message.id}.mp4', output_params=['-crf', '10'],
-                                fps=60, **{'macro_block_size': None}) as writer:
+                                fps=30, **{'macro_block_size': None}) as writer:
             for time, player_states in info['timedPlayerStates'].items():
                 # print(info['caps_history'][time])
                 writer.append_data(await self.bot.loop.run_in_executor(ThreadPoolExecutor(), create_frame, time, player_states))
-
-        await ctx.send(file=discord.File(f'assets/temp/{ctx.message.id}.mp4', filename=f'timelapse.mp4'))
+        dfname = rchop(ctx.message.attachments[0].filename,".wowsreplay")
+        await ctx.send(file=discord.File(f'assets/temp/{ctx.message.id}.mp4', filename=(f'{dfname}.mp4')))
         os.remove(f'assets/temp/{ctx.message.id}.mp4')
 
     def fetch_players(self, region, search):
